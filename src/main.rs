@@ -2,31 +2,26 @@
 #![no_main]
 extern crate panic_halt;
 
-use avr_delay::delay_ms;
-use avr_device::atmega32u4::PORTD;
+use atmega_hal::{clock, pins, Peripherals};
 
-#[no_mangle]
-pub extern "C" fn main() {
-    // PB0: RX LED
-    // PD5: TX LED
-    // 以下はPD5を点滅させる
-    let ptr = PORTD::ptr();
+#[atmega_hal::entry]
+fn main() -> ! {
+    let dp = Peripherals::take().unwrap();
+    let pins = pins!(dp);
+    let mut leds = [
+        pins.pb0.into_output().downgrade(), // PB0: RX LED
+        pins.pd5.into_output().downgrade(), // PD5: TX LED
+    ];
 
-    unsafe {
-        // DDR: データの流れの向きを設定する。1だとPD5が出力になる
-        (*ptr).ddrd.modify(|_, w| w.pd5().set_bit());
-        // PD5を落としておく
-        (*ptr).portd.write(|w| w.pd5().clear_bit())
-    }
+    leds[0].set_high();
+    leds[1].set_low();
 
     loop {
-        // PD5をオン
-        unsafe { (*ptr).portd.write(|w| w.pd5().set_bit()) }
+        for i in 0..2 {
+            leds[i].toggle();
+        }
+
         // 0.1秒待機
-        delay_ms(100);
-        // PD5をオフ
-        unsafe { (*ptr).portd.write(|w| w.pd5().clear_bit()) }
-        // 0.1秒待機
-        delay_ms(100);
+        avr_delay::delay_ms(100);
     }
 }

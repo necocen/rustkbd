@@ -8,9 +8,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-avr-device = {version = "0.3.2", features = ["atmega32u4"]}
-avr_delay = "0.3.2"
 panic-halt = "0.2.0"
+atmega-hal = { git = "https://github.com/Rahix/avr-hal", branch = "main", features = ["atmega32u4", "rt"] }
+avr_delay = "0.3.2"
 
 [profile.dev]
 panic = "abort"
