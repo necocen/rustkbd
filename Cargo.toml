@@ -11,6 +11,9 @@ edition = "2018"
 panic-halt = "0.2.0"
 atmega-hal = { git = "https://github.com/Rahix/avr-hal", branch = "main", features = ["atmega32u4", "rt"] }
 avr_delay = "0.3.2"
+avr-progmem = "0.1.2"
+avr-device = "0.3.2"
+embedded-hal = "0.2.6"
 
 [profile.dev]
 panic = "abort"

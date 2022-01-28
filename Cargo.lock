@@ -58,6 +58,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "avr-progmem"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c132b5cb3bb60774763e02c965e7f8959a7f225e22291ada078968887fe8248c"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "avr_delay"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -176,7 +185,10 @@ name = "rustkbd"
 version = "0.1.0"
 dependencies = [
  "atmega-hal",
+ "avr-device",
+ "avr-progmem",
  "avr_delay",
+ "embedded-hal",
  "panic-halt",
 ]
 
