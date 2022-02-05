@@ -136,7 +136,7 @@ fn usb_init() {
         usb.uhwcon.modify(|_, w| w.uvrege().set_bit());
         // In order for the microcontroller to attach to the USB and the host to recognize the new device, the VBUS pad must also be activated via the OTGPADE bit in the USBCON register.
         usb.usbcon.modify(|_, w| w.otgpade().set_bit());
-        // low speed mode (full speed modeのときは外部発振子が必要らしい？)
+        // low speed mode (full speed modeのときは外部発振子が必要らしい？)←Pro Microなので載ってると思われる。が開発中はデバッグしやすいようにlsmでやる
         usb.udcon.modify(|_, w| w.lsm().set_bit());
         // Only the VBUS interrupt is currently required, as this is used for plug-in detection. This interrupt is activated via the VBUSTE bit in the USBCON register.
         usb.usbcon.modify(|_, w| w.vbuste().set_bit());
