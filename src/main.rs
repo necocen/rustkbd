@@ -372,10 +372,7 @@ fn usb_control_request(
             }
             return;
         }
-        _ => {
-            b5.set_low();
-            return;
-        }
+        _ => {}
     }
     if request.wIndex == 0 {
         // HID request
