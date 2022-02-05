@@ -213,109 +213,24 @@ fn USB_COM() {
     });
 }
 
-#[inline]
+#[inline(always)]
 fn usb_recv_request(usb: &pac::USB_DEVICE, b5: &mut Pin<Output, PB5>) -> SetupPacket {
-    //let packet: SetupPacket = unsafe { core::mem::zeroed() };
-    // packet.bmRequestType = BmRequestType(usb.uedatx.read().bits());
-    // packet.bRequest = usb.uedatx.read().bits();
-    // packet.wValue = usb.uedatx.read().bits() as u16;
-    // packet.wValue |= (usb.uedatx.read().bits() as u16) << 8;
-    // packet.wIndex = usb.uedatx.read().bits() as u16;
-    // packet.wIndex |= (usb.uedatx.read().bits() as u16) << 8;
-    // packet.wLength = usb.uedatx.read().bits() as u16;
-    // packet.wLength |= (usb.uedatx.read().bits() as u16) << 8;
-    // if packet.wValue == 0xffff {
-    //     b5.set_low();
-    // }
-
     let mut buf = [0u8; core::mem::size_of::<SetupPacket>()];
     for b in buf.iter_mut() {
-        let k = usb.uedatx.read().bits();
-        *b = k;
-        if ![0x80u8, 0x06u8, 0x01u8, 0x00, 0x12u8, 0x05u8, 0x0eu8, 0x0d].contains(&k) {
-            //b5.set_low();
-        }
+        *b = usb.uedatx.read().bits();
     }
     usb.ueintx.modify(|_, w| w.rxstpi().clear_bit());
-    let packet: SetupPacket = unsafe { core::mem::transmute(buf) };
-    if ![0x00u8, 0x80].contains(&packet.bmRequestType.bits()) {
-        //    b5.set_low();
-    }
-    if ![0x06u8, 0x05].contains(&packet.bRequest) {
-        //    b5.set_low();
-    }
-    if packet.wValue != 0x000d {
-        if packet.wValue == 0x0120 {
-            // b5.set_low();
-        }
-    }
-
-    // buf[0] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[0]) {
-    //     b5.set_low();
-    // }
-    // buf[1] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[1]) {
-    //     b5.set_low();
-    // }
-    // buf[2] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[2]) {
-    //     b5.set_low();
-    // }
-    // buf[3] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[3]) {
-    //     b5.set_low();
-    // }
-    // buf[4] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[4]) {
-    //     b5.set_low();
-    // }
-    // buf[5] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[5]) {
-    //     b5.set_low();
-    // }
-    // buf[6] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[6]) {
-    //     b5.set_low();
-    // }
-    // buf[7] = usb.uedatx.read().bits();
-    // if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(&buf[7]) {
-    //     b5.set_low();
-    // }
-    // for b in buf.iter() {
-    //     if ![0x80u8, 0x06u8, 0x01u8, 0x00u8, 0x12u8, 0x05u8, 0x0eu8].contains(b) {
-    //         //            b5.set_low();
-    //     }
-    //     if [0x0au8, 0xd1u8].contains(b) {
-    //         //b5.set_low();
-    //     }
-    // }
-    //usb.ueintx.modify(|_, w| w.rxstpi().clear_bit());
-    //unsafe { core::mem::transmute(buf) }
-    packet
+    unsafe { core::mem::transmute(buf) }
 }
-#[inline(always)]
+
 fn usb_control_request(
     usb: &pac::USB_DEVICE,
     b5: &mut Pin<Output, PB5>,
     b6: &mut Pin<Output, PB6>,
 ) {
-    //let request = usb_recv_request(usb, b5);
-    let mut buf = [0u8; 8];
-    //let mut delay = Delay::<MHz16>::new();
-    for b in buf.iter_mut() {
-        *b = usb.uedatx.read().bits();
-        //delay.delay_ms(1u16);
-    }
-    usb.ueintx.modify(|_, w| w.rxstpi().clear_bit());
-    //delay.delay_ms(1u16);
-    let request: SetupPacket = unsafe { core::mem::transmute(buf) };
-    if request.wValue >> 8 == 0x0a {
-        b5.set_low();
-    } else {
-        //b5.set_high();
-    }
-    //delay.delay_ms(1u16);
+    let mut buf = [0u8; 64];
+    let request = usb_recv_request(usb, b5);
+
     match request.bRequest {
         0 => {
             // GET_STATUS
@@ -349,19 +264,8 @@ fn usb_control_request(
         }
         6 => {
             // REQUEST_GET_DESCRIPTOR
-            if request.wValue >> 8 == 0x0a {
-                b5.set_low();
-            }
-            let mut buf = [0u8; 64];
             let bytes = match request.wValue >> 8 {
-                0x01 | 0x0a => {
-                    //0x01 => {
-                    if request.wValue >> 8 == 0x0a {
-                        b5.set_low();
-                    } else {
-                        //b5.set_high();
-                    }
-
+                0x01 => {
                     unsafe {
                         core::slice::from_raw_parts(
                             //(&DEVICE_DESCR.load() as *const DeviceDescriptor) as *const u8,
@@ -463,7 +367,7 @@ fn usb_control_request(
             return;
         }
         _ => {
-            //b5.set_low();
+            b5.set_low();
             return;
         }
     }
