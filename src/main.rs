@@ -4,23 +4,18 @@
 extern crate panic_halt;
 
 use core::{
-    borrow::BorrowMut,
     cell::RefCell,
-    cmp::{max, min},
     intrinsics::copy_nonoverlapping,
     sync::atomic::{AtomicU8, Ordering},
 };
 
 use atmega_hal::{
-    clock::MHz16,
-    delay::Delay,
     pac, pins,
     port::{mode::Output, Pin, PB5, PB6},
-    Peripherals, Pins,
+    Peripherals,
 };
 use avr_device::interrupt::{self, Mutex};
 use avr_progmem::progmem;
-use embedded_hal::blocking::delay::DelayMs;
 
 static MY_USB: Mutex<RefCell<Option<pac::USB_DEVICE>>> = Mutex::new(RefCell::new(None));
 static MY_PLL: Mutex<RefCell<Option<pac::PLL>>> = Mutex::new(RefCell::new(None));
@@ -104,7 +99,6 @@ fn main() -> ! {
     let dev = dp.USB_DEVICE;
     let pll = dp.PLL;
     let pins = pins!(dp);
-    let mut delay = Delay::<MHz16>::new();
 
     interrupt::free(|cs| {
         MY_USB.borrow(cs).replace(Some(dev));
