@@ -7,6 +7,7 @@ use core::{
     borrow::BorrowMut,
     cell::RefCell,
     cmp::{max, min},
+    intrinsics::copy_nonoverlapping,
     sync::atomic::{AtomicU8, Ordering},
 };
 
@@ -265,48 +266,60 @@ fn usb_control_request(
         6 => {
             // REQUEST_GET_DESCRIPTOR
             let bytes = match request.wValue >> 8 {
-                0x01 => {
-                    unsafe {
-                        core::slice::from_raw_parts(
-                            //(&DEVICE_DESCR.load() as *const DeviceDescriptor) as *const u8,
-                            (&DEVICE_DESCR as *const DeviceDescriptor) as *const u8,
-                            core::mem::size_of::<DeviceDescriptor>(),
-                        )
-                    }
-                }
-                0x02 => {
-                    unsafe {
-                        core::slice::from_raw_parts(
-                            //(&CONFIG_DESCR.load() as *const USBConfiguration) as *const u8,
-                            (&CONFIG_DESCR as *const USBConfiguration) as *const u8,
-                            core::mem::size_of::<USBConfiguration>(),
-                        )
-                    }
-                }
+                0x01 => unsafe {
+                    let data = DEVICE_DESCR.load();
+                    copy_nonoverlapping(
+                        &data as *const _ as *const u8,
+                        &mut buf as *mut _ as *mut u8,
+                        core::mem::size_of::<DeviceDescriptor>(),
+                    );
+                    &buf[..core::mem::size_of::<DeviceDescriptor>()]
+                },
+                0x02 => unsafe {
+                    let data = CONFIG_DESCR.load();
+                    copy_nonoverlapping(
+                        &data as *const _ as *const u8,
+                        &mut buf as *mut _ as *mut u8,
+                        core::mem::size_of::<USBConfiguration>(),
+                    );
+                    &buf[..core::mem::size_of::<USBConfiguration>()]
+                },
                 0x03 => {
                     let descr_index = request.wValue & 0xff;
                     if descr_index == 0 {
-                        //&STRING_DESCR0.load()
-                        &STRING_DESCR0
+                        let data = STRING_DESCR0.load();
+                        unsafe {
+                            copy_nonoverlapping(
+                                &data as *const _ as *const u8,
+                                &mut buf as *mut _ as *mut u8,
+                                data.len(),
+                            );
+                        }
+                        &buf[0..data.len()]
                     } else {
-                        //let data = STRINGS.load()[descr_index as usize - 1];
-                        let data = STRINGS[descr_index as usize - 1];
+                        let data = STRINGS.load_at(descr_index as usize - 1);
                         let len = build_string_descr(&mut buf, data).unwrap();
                         &buf[0..len]
                     }
                 }
-                0x21 => {
-                    unsafe {
-                        core::slice::from_raw_parts(
-                            //(&CONFIG_DESCR.load().hid_func.hid_descriptor as *const HidDescriptor)
-                            (&CONFIG_DESCR.hid_func.hid_descriptor as *const HidDescriptor)
-                                as *const u8,
-                            core::mem::size_of::<HidDescriptor>(),
-                        )
-                    }
-                }
-                //0x22 => &HID_REPORT_DESCR.load(),
-                0x22 => &HID_REPORT_DESCR,
+                0x21 => unsafe {
+                    let data = CONFIG_DESCR.load().hid_func.hid_descriptor;
+                    copy_nonoverlapping(
+                        &data as *const _ as *const u8,
+                        &mut buf as *mut _ as *mut u8,
+                        core::mem::size_of::<HidDescriptor>(),
+                    );
+                    &buf[..core::mem::size_of::<HidDescriptor>()]
+                },
+                0x22 => unsafe {
+                    let data = HID_REPORT_DESCR.load();
+                    copy_nonoverlapping(
+                        &data as *const u8,
+                        &mut buf as *mut _ as *mut u8,
+                        data.len(),
+                    );
+                    &buf[0..data.len()]
+                },
                 _ => {
                     usb.ueconx
                         .modify(|_, w| w.stallrq().set_bit().epen().set_bit());
@@ -348,7 +361,6 @@ fn usb_control_request(
             return;
         }
         9 => {
-            //MY_B6.borrow(cs).borrow_mut().as_mut().unwrap().set_high();
             // REQUEST_SET_CONFIGURATION
             let ty = request.bmRequestType;
             if ty.direction() == Direction::HostToDevice
@@ -618,163 +630,85 @@ pub struct SetupPacket {
     pub wLength: u16,
 }
 
-// progmem! {
-//     static progmem DEVICE_DESCR: DeviceDescriptor = DeviceDescriptor {
-//         bLength: core::mem::size_of::<DeviceDescriptor>() as u8,
-//         bDescriptorType: 1,
-//         bcdUSB: 0x0200, // USB 2.0
-//         bDeviceClass: 0,
-//         bDeviceSubClass: 0,
-//         bDeviceProtocol: 0,
-//         bMaxPacketSize0: 8,
-//         idVendor: 0xfeed,
-//         idProduct: 0x802f, // ?
-//         bcdDevice: 0x0100, // v1.00
-//         iManufacturer: 1,
-//         iProduct: 2,
-//         iSerialNumber: 3,
-//         bNumConfigurations: 1,
-//     };
-//     static progmem CONFIG_DESCR: USBConfiguration = USBConfiguration {
-//         config: ConfigDescriptor {
-//             bLength: core::mem::size_of::<ConfigDescriptor>() as u8,
-//             bDescriptorType: 2,
-//             wTotalLength: core::mem::size_of::<USBConfiguration>() as u16,
-//             bNumInterfaces: 1,
-//             bConfigurationValue: 1,
-//             iConfiguration: 0,
-//             bmAttributes: 0xC0,
-//             bMaxPower: 0x32,
-//         },
-//         kbd_interf: InterfaceDescriptor {
-//             bLength: core::mem::size_of::<InterfaceDescriptor>() as u8,
-//             bDescriptorType: 4,
-//             bInterfaceNumber: 0,
-//             bAlternateSetting: 0,
-//             bNumEndpoints: 0x01,
-//             bInterfaceClass: 0x03, // Vendor specific
-//             bInterfaceSubClass: 1,
-//             bInterfaceProtocol: 1,
-//             iInterface: 0,
-//         },
-//         hid_func: HidFunction {
-//             hid_descriptor: HidDescriptor {
-//                 bLength: core::mem::size_of::<HidFunction>() as u8,
-//                 bDescriptorType: 0x21,
-//                 bcdHID: 0x0111,
-//                 bCountryCode: 0,
-//                 bNumDescriptors: 1,
-//             },
-//             hid_report: HidReport {
-//                 bReportDescriptorType: 0x22,
-//                 wDescriptorLength: 63, // sizeof?
-//             },
-//         },
-//         hid_endpoint: EndpointDescriptor {
-//             bLength: core::mem::size_of::<EndpointDescriptor>() as u8,
-//             bDescriptorType: 5,
-//             bEndpointAddress: 0x83,
-//             bmAttributes: 0x03,
-//             wMaxPacketSize: 8,
-//             bInterval: 0x0a,
-//         },
-//     };
-
-//     static progmem HID_REPORT_DESCR: &[u8] = &[
-//         0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01,
-//         0x75, 0x01, 0x95, 0x08, 0x81, 0x02, 0x95, 0x01, 0x75, 0x08, 0x81, 0x01, 0x95, 0x05, 0x75, 0x01,
-//         0x05, 0x08, 0x19, 0x01, 0x29, 0x05, 0x91, 0x02, 0x95, 0x01, 0x75, 0x03, 0x91, 0x01, 0x95, 0x06,
-//         0x75, 0x08, 0x15, 0x00, 0x25, 0x65, 0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00, 0xC0,
-//     ];
-
-//     static progmem DEBUG_DESCR: DebugDescriptor = DebugDescriptor {
-//         bLength: core::mem::size_of::<DebugDescriptor>() as u8,
-//         bDescriptorType: 10,
-//         bDebugInEndpoint: 1,
-//         bDebugOutEndpoint: 1,
-//     };
-
-//     static progmem STRINGS: &[&str; 3] = &["necocen", "necoboard", "17"];
-//     static progmem STRING_DESCR0: &[u8] = &[0x04, 0x03, 0x09, 0x04]; // lang id: US English
-// }
-
-static DEVICE_DESCR: DeviceDescriptor = DeviceDescriptor {
-    bLength: core::mem::size_of::<DeviceDescriptor>() as u8,
-    bDescriptorType: 1,
-    bcdUSB: 0x0200, // USB 2.0
-    bDeviceClass: 0,
-    bDeviceSubClass: 0,
-    bDeviceProtocol: 0,
-    bMaxPacketSize0: 8,
-    idVendor: 0xfeed,
-    idProduct: 0x802f, // ?
-    bcdDevice: 0x0100, // v1.00
-    iManufacturer: 1,
-    iProduct: 2,
-    iSerialNumber: 3,
-    bNumConfigurations: 1,
-};
-static CONFIG_DESCR: USBConfiguration = USBConfiguration {
-    config: ConfigDescriptor {
-        bLength: core::mem::size_of::<ConfigDescriptor>() as u8,
-        bDescriptorType: 2,
-        wTotalLength: core::mem::size_of::<USBConfiguration>() as u16,
-        bNumInterfaces: 1,
-        bConfigurationValue: 1,
-        iConfiguration: 0,
-        bmAttributes: 0xC0,
-        bMaxPower: 0x32,
-    },
-    kbd_interf: InterfaceDescriptor {
-        bLength: core::mem::size_of::<InterfaceDescriptor>() as u8,
-        bDescriptorType: 4,
-        bInterfaceNumber: 0,
-        bAlternateSetting: 0,
-        bNumEndpoints: 0x01,
-        bInterfaceClass: 0x03, // Vendor specific
-        bInterfaceSubClass: 1,
-        bInterfaceProtocol: 1,
-        iInterface: 0,
-    },
-    hid_func: HidFunction {
-        hid_descriptor: HidDescriptor {
-            bLength: core::mem::size_of::<HidFunction>() as u8,
-            bDescriptorType: 0x21,
-            bcdHID: 0x0101,
-            bCountryCode: 0,
-            bNumDescriptors: 1,
+progmem! {
+    static progmem DEVICE_DESCR: DeviceDescriptor = DeviceDescriptor {
+        bLength: core::mem::size_of::<DeviceDescriptor>() as u8,
+        bDescriptorType: 1,
+        bcdUSB: 0x0200, // USB 2.0
+        bDeviceClass: 0,
+        bDeviceSubClass: 0,
+        bDeviceProtocol: 0,
+        bMaxPacketSize0: 8,
+        idVendor: 0xfeed,
+        idProduct: 0x802f, // ?
+        bcdDevice: 0x0100, // v1.00
+        iManufacturer: 1,
+        iProduct: 2,
+        iSerialNumber: 3,
+        bNumConfigurations: 1,
+    };
+    static progmem CONFIG_DESCR: USBConfiguration = USBConfiguration {
+        config: ConfigDescriptor {
+            bLength: core::mem::size_of::<ConfigDescriptor>() as u8,
+            bDescriptorType: 2,
+            wTotalLength: core::mem::size_of::<USBConfiguration>() as u16,
+            bNumInterfaces: 1,
+            bConfigurationValue: 1,
+            iConfiguration: 0,
+            bmAttributes: 0xC0,
+            bMaxPower: 0x32,
         },
-        hid_report: HidReport {
-            bReportDescriptorType: 0x22,
-            wDescriptorLength: 63, // sizeof?
+        kbd_interf: InterfaceDescriptor {
+            bLength: core::mem::size_of::<InterfaceDescriptor>() as u8,
+            bDescriptorType: 4,
+            bInterfaceNumber: 0,
+            bAlternateSetting: 0,
+            bNumEndpoints: 0x01,
+            bInterfaceClass: 0x03, // Vendor specific
+            bInterfaceSubClass: 1,
+            bInterfaceProtocol: 1,
+            iInterface: 0,
         },
-    },
-    hid_endpoint: EndpointDescriptor {
-        bLength: core::mem::size_of::<EndpointDescriptor>() as u8,
-        bDescriptorType: 5,
-        bEndpointAddress: 0x83,
-        bmAttributes: 0x03,
-        wMaxPacketSize: 8,
-        bInterval: 0x01,
-    },
-};
+        hid_func: HidFunction {
+            hid_descriptor: HidDescriptor {
+                bLength: core::mem::size_of::<HidFunction>() as u8,
+                bDescriptorType: 0x21,
+                bcdHID: 0x0111,
+                bCountryCode: 0,
+                bNumDescriptors: 1,
+            },
+            hid_report: HidReport {
+                bReportDescriptorType: 0x22,
+                wDescriptorLength: 63, // sizeof?
+            },
+        },
+        hid_endpoint: EndpointDescriptor {
+            bLength: core::mem::size_of::<EndpointDescriptor>() as u8,
+            bDescriptorType: 5,
+            bEndpointAddress: 0x83,
+            bmAttributes: 0x03,
+            wMaxPacketSize: 8,
+            bInterval: 0x0a,
+        },
+    };
 
-static DEBUG_DESCR: DebugDescriptor = DebugDescriptor {
-    bLength: core::mem::size_of::<DebugDescriptor>() as u8,
-    bDescriptorType: 10,
-    bDebugInEndpoint: 1,
-    bDebugOutEndpoint: 1,
-};
+    static progmem HID_REPORT_DESCR: [u8; 63] = [
+        0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01,
+        0x75, 0x01, 0x95, 0x08, 0x81, 0x02, 0x95, 0x01, 0x75, 0x08, 0x81, 0x01, 0x95, 0x05, 0x75, 0x01,
+        0x05, 0x08, 0x19, 0x01, 0x29, 0x05, 0x91, 0x02, 0x95, 0x01, 0x75, 0x03, 0x91, 0x01, 0x95, 0x06,
+        0x75, 0x08, 0x15, 0x00, 0x25, 0x65, 0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00, 0xC0,
+    ];
 
-static HID_REPORT_DESCR: &[u8] = &[
-    0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01,
-    0x75, 0x01, 0x95, 0x08, 0x81, 0x02, 0x95, 0x01, 0x75, 0x08, 0x81, 0x01, 0x95, 0x05, 0x75, 0x01,
-    0x05, 0x08, 0x19, 0x01, 0x29, 0x05, 0x91, 0x02, 0x95, 0x01, 0x75, 0x03, 0x91, 0x01, 0x95, 0x06,
-    0x75, 0x08, 0x15, 0x00, 0x25, 0x65, 0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00, 0xC0,
-];
+    static progmem DEBUG_DESCR: DebugDescriptor = DebugDescriptor {
+        bLength: core::mem::size_of::<DebugDescriptor>() as u8,
+        bDescriptorType: 10,
+        bDebugInEndpoint: 1,
+        bDebugOutEndpoint: 1,
+    };
 
-static STRINGS: &[&str; 3] = &["necocen", "necoboard", "17"];
-static STRING_DESCR0: &[u8] = &[0x04, 0x03, 0x09, 0x04]; // lang id: US English
+    static progmem STRINGS: [&str; 3] = ["necocen", "necoboard", "17"];
+    static progmem STRING_DESCR0: [u8; 4] = [0x04, 0x03, 0x09, 0x04]; // lang id: US English
+}
 
 pub fn build_string_descr(buf: &mut [u8], data: &str) -> Option<usize> {
     let utf16 = data.encode_utf16();
