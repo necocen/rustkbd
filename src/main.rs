@@ -10,12 +10,15 @@ use core::{
 };
 
 use atmega_hal::{
+    clock::MHz16,
+    delay::Delay,
     pac, pins,
     port::{mode::Output, Pin, PB5, PB6},
     Peripherals,
 };
 use avr_device::interrupt::{self, Mutex};
 use avr_progmem::progmem;
+use embedded_hal::{blocking::delay::DelayMs, prelude::_embedded_hal_spi_FullDuplex};
 
 static MY_USB: Mutex<RefCell<Option<pac::USB_DEVICE>>> = Mutex::new(RefCell::new(None));
 static MY_PLL: Mutex<RefCell<Option<pac::PLL>>> = Mutex::new(RefCell::new(None));
@@ -38,9 +41,16 @@ enum DeviceState {
     Powered,
     Suspend,
     Addressed,
+    Configured,
 }
 
-fn configure_endpoint(dev: &pac::USB_DEVICE, addr: u8, size: u8) -> u8 {
+fn configure_endpoint(
+    dev: &pac::USB_DEVICE,
+    addr: u8,
+    size: u8,
+    ep_type: u8,
+    double_bank: bool,
+) -> u8 {
     let addr_tmp = addr & 0x0F;
     for i in addr_tmp..0x07 {
         let mut uecfg0x_tmp = 0u8;
@@ -48,24 +58,23 @@ fn configure_endpoint(dev: &pac::USB_DEVICE, addr: u8, size: u8) -> u8 {
         let mut ueienx_tmp = 0u8;
         unsafe { dev.uenum.write(|w| w.bits(i)) }; //?
         if i == addr_tmp {
-            uecfg0x_tmp = 0 << 6; // Type << EPTYPE0
+            uecfg0x_tmp = ep_type << 6; // Type << EPTYPE0
             if (addr & 0x80) != 0 {
                 // ENDPOINT_DIR_MASK_IN
                 uecfg0x_tmp |= 0x01 << 0 // EPDIR
             }
-            // if doubleBank {
-            //      uecfg1x_tmp |= 0x01 << 2 // EPBK0
-            // }
+            if double_bank {
+                uecfg1x_tmp |= 0x01 << 2 // EPBK0
+            }
             let mut tmp = 0x08u8;
             let mut epsize = 0x00u8;
             while tmp < size {
-                // ENDPOINT_CONTROL_SIZE
                 epsize += 1;
                 tmp <<= 1;
             }
             uecfg1x_tmp |= epsize << 4; // EPSIZE0
             uecfg1x_tmp |= 0x01 << 1; // ALLOC
-            ueienx_tmp = 0x01 << 3; // RXSTPE
+            ueienx_tmp = 0;
         } else {
             uecfg0x_tmp = dev.uecfg0x.read().bits();
             uecfg1x_tmp = dev.uecfg1x.read().bits();
@@ -99,6 +108,7 @@ fn main() -> ! {
     let dev = dp.USB_DEVICE;
     let pll = dp.PLL;
     let pins = pins!(dp);
+    let mut delay = Delay::<MHz16>::new();
 
     interrupt::free(|cs| {
         MY_USB.borrow(cs).replace(Some(dev));
@@ -109,13 +119,15 @@ fn main() -> ! {
 
     usb_init();
 
+    keys_init();
+
     unsafe {
         interrupt::enable();
     }
     loop {
-        //interrupt::free(|cs| MY_B6.borrow(cs).borrow_mut().as_mut().unwrap().toggle());
-        // 0.1秒待機
-        //delay.delay_ms(100u16);
+        // 1秒待機
+        delay.delay_ms(32u16);
+        usb_send();
     }
 }
 
@@ -147,6 +159,36 @@ fn usb_init() {
     });
 }
 
+fn keys_init() {
+    interrupt::free(|cs| {});
+}
+
+fn usb_send() {
+    if get_device_status() != DeviceState::Configured {
+        return;
+    }
+    interrupt::free(|cs| {
+        let usb = MY_USB.borrow(cs).borrow();
+        let usb = usb.as_ref().unwrap();
+        let current_ep = usb.uenum.read().bits();
+        unsafe { usb.uenum.write(|w| w.bits(3)) }; // KEYBOARD_ENDPOINT_NUM
+        while usb.ueintx.read().rwal().bit_is_clear() {}
+        MY_B6.borrow(cs).borrow_mut().as_mut().unwrap().toggle();
+        unsafe {
+            usb.uedatx.write(|w| w.bits(0)); // keyboard_modifier
+            usb.uedatx.write(|w| w.bits(0)); // 0
+            usb.uedatx.write(|w| w.bits(0x04)); // pressed_keys[0] 'a'
+            usb.uedatx.write(|w| w.bits(0)); // [1]
+            usb.uedatx.write(|w| w.bits(0)); // [2]
+            usb.uedatx.write(|w| w.bits(0)); // [3]
+            usb.uedatx.write(|w| w.bits(0)); // [4]
+            usb.uedatx.write(|w| w.bits(0)); // [5]
+        }
+        usb.ueintx.modify(|_, w| w.fifocon().clear_bit());
+        unsafe { usb.uenum.write(|w| w.bits(current_ep)) };
+    });
+}
+
 #[avr_device::interrupt(atmega32u4)]
 fn USB_GEN() {
     // The PLL is configured in the ISR of the USB controller as soon as a VBUS interrupt has been triggered.
@@ -170,7 +212,7 @@ fn USB_GEN() {
         if usb.udint.read().eorsti().bit_is_set() {
             // end of reset interrupt
             unsafe { usb.udint.write(|w| w.bits(0)) };
-            let r = configure_endpoint(usb, 0, 8);
+            let r = configure_endpoint(usb, 0, 8, 0, false);
             if r != 0 {
                 unsafe { usb.uerst.write(|w| w.bits(1)) };
                 unsafe { usb.uerst.write(|w| w.bits(0)) };
@@ -362,13 +404,24 @@ fn usb_control_request(
                 && ty.recipient() == Recipient::Device
             {
                 let cfg = (request.wValue & 0xFF) as u8;
-                usb.ueintx.modify(|_, w| w.txini().clear_bit());
-                unsafe { usb.uenum.write(|w| w.bits(3)) }; // KEYBOARD_ENDPOINT_NUM
-                usb.ueconx.write(|w| w.epen().set_bit());
-                usb.uecfg0x.write(|w| w.eptype().bits(1).epdir().set_bit());
-                usb.uecfg1x.write(|w| w.alloc().set_bit().epbk().bits(1));
-                unsafe { usb.uerst.write(|w| w.bits(0x1e)) };
-                unsafe { usb.uerst.write(|w| w.bits(0)) };
+                if cfg > 0 {
+                    usb.ueintx
+                        .modify(|_, w| w.txini().clear_bit().fifocon().clear_bit());
+                    while usb.ueintx.read().txini().bit_is_clear() {
+                        if get_device_status() == DeviceState::Unattached {
+                            break;
+                        }
+                    }
+                    usb.ueintx.modify(|_, w| w.txini().clear_bit());
+                    let r = configure_endpoint(usb, 0x83, 8, 3, true); // KEYBOARD_ENDPOINT_NUM
+                    if r != 0 {
+                        unsafe { usb.uerst.write(|w| w.bits(0x08)) }; // EP3リセット
+                        unsafe { usb.uerst.write(|w| w.bits(0)) };
+                        DEVICE_STATUS.store(DeviceState::Configured as u8, Ordering::Relaxed);
+                    }
+                } else {
+                    DEVICE_STATUS.store(DeviceState::Addressed as u8, Ordering::Relaxed);
+                }
             }
             return;
         }
@@ -385,10 +438,13 @@ fn usb_control_request(
                         while usb.ueintx.read().txini().bit_is_clear() {}
                         // TODO: keyboard_modifier
                         unsafe { usb.uedatx.write(|w| w.bits(0)) };
-                        for _i in 0..6 {
-                            // TODO: keyboard_pressed_keys[i]
-                            unsafe { usb.uedatx.write(|w| w.bits(0)) };
-                        }
+                        unsafe { usb.uedatx.write(|w| w.bits(0)) };
+                        unsafe { usb.uedatx.write(|w| w.bits(0)) };
+                        unsafe { usb.uedatx.write(|w| w.bits(0)) };
+                        unsafe { usb.uedatx.write(|w| w.bits(0)) };
+                        unsafe { usb.uedatx.write(|w| w.bits(0)) };
+                        unsafe { usb.uedatx.write(|w| w.bits(0)) };
+                        unsafe { usb.uedatx.write(|w| w.bits(0)) };
                         usb.ueintx.modify(|_, w| w.txini().clear_bit());
                     }
                     0x02 => {
@@ -414,7 +470,7 @@ fn usb_control_request(
                 match request.bRequest {
                     0x09 => {
                         // SET_REPORT
-                        while usb.ueintx.read().txini().bit_is_clear() {}
+                        while usb.ueintx.read().rxouti().bit_is_clear() {}
                         // TODO: keyboard_leds ?
                         usb.ueintx
                             .modify(|_, w| w.txini().clear_bit().rxouti().clear_bit());
