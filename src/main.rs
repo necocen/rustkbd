@@ -46,60 +46,58 @@ enum DeviceState {
 
 fn configure_endpoint(
     dev: &pac::USB_DEVICE,
-    addr: u8,
+    ep: u8,
     size: u8,
     ep_type: u8,
     double_bank: bool,
-) -> u8 {
-    let addr_tmp = addr & 0x0F;
+) -> bool {
+    let addr_tmp = ep & 0x0F;
     for i in addr_tmp..0x07 {
-        let mut uecfg0x_tmp = 0u8;
-        let mut uecfg1x_tmp = 0u8;
-        let mut ueienx_tmp = 0u8;
-        unsafe { dev.uenum.write(|w| w.bits(i)) }; //?
+        unsafe { dev.uenum.write(|w| w.bits(i)) };
+
         if i == addr_tmp {
-            uecfg0x_tmp = ep_type << 6; // Type << EPTYPE0
-            if (addr & 0x80) != 0 {
-                // ENDPOINT_DIR_MASK_IN
-                uecfg0x_tmp |= 0x01 << 0 // EPDIR
-            }
-            if double_bank {
-                uecfg1x_tmp |= 0x01 << 2 // EPBK0
-            }
             let mut tmp = 0x08u8;
             let mut epsize = 0x00u8;
             while tmp < size {
                 epsize += 1;
                 tmp <<= 1;
             }
-            uecfg1x_tmp |= epsize << 4; // EPSIZE0
-            uecfg1x_tmp |= 0x01 << 1; // ALLOC
-            ueienx_tmp = 0;
+            dev.ueconx.modify(|_, w| w.epen().clear_bit());
+            dev.uecfg1x.modify(|_, w| w.alloc().clear_bit());
+            dev.ueconx.modify(|_, w| w.epen().set_bit());
+            dev.uecfg0x.modify(|_, w| w.eptype().bits(ep_type));
+            if ep & 0x80 != 0 {
+                // IN Endpoint
+                dev.uecfg0x.modify(|_, w| w.epdir().set_bit());
+            }
+            dev.uecfg1x
+                .write(|w| w.epsize().bits(epsize).alloc().set_bit());
+            if double_bank {
+                dev.uecfg1x.modify(|_, w| w.epbk().bits(1));
+            }
+            unsafe {
+                dev.ueienx.write(|w| w.bits(0));
+            }
         } else {
-            uecfg0x_tmp = dev.uecfg0x.read().bits();
-            uecfg1x_tmp = dev.uecfg1x.read().bits();
-            ueienx_tmp = dev.ueienx.read().bits();
+            if dev.uecfg1x.read().alloc().bit_is_clear() {
+                continue;
+            }
+            let uecfg1x_tmp = dev.uecfg1x.read().bits();
+            dev.ueconx.modify(|_, w| w.epen().clear_bit());
+            dev.uecfg1x.modify(|_, w| w.alloc().clear_bit());
+            dev.ueconx.modify(|_, w| w.epen().set_bit());
+            unsafe {
+                dev.uecfg1x.write(|w| w.bits(uecfg1x_tmp));
+            }
         }
-
-        if (uecfg1x_tmp & (0x01 << 1)) == 0 {
-            // ALLOC
-            continue;
-        }
-
-        dev.ueconx.modify(|_, w| w.epen().clear_bit());
-        dev.uecfg1x.modify(|_, w| w.alloc().clear_bit());
-        dev.ueconx.modify(|_, w| w.epen().set_bit());
-        unsafe { dev.uecfg0x.write(|w| w.bits(uecfg0x_tmp)) };
-        unsafe { dev.uecfg1x.write(|w| w.bits(uecfg1x_tmp)) };
-        unsafe { dev.ueienx.write(|w| w.bits(ueienx_tmp)) };
 
         if dev.uesta0x.read().cfgok().bit_is_clear() {
             // failed
-            return 0;
+            return false;
         }
     }
     unsafe { dev.uenum.write(|w| w.bits(addr_tmp)) };
-    return 1;
+    true
 }
 
 #[atmega_hal::entry]
@@ -212,8 +210,7 @@ fn USB_GEN() {
         if usb.udint.read().eorsti().bit_is_set() {
             // end of reset interrupt
             unsafe { usb.udint.write(|w| w.bits(0)) };
-            let r = configure_endpoint(usb, 0, 8, 0, false);
-            if r != 0 {
+            if configure_endpoint(usb, 0, 8, 0, false) {
                 unsafe { usb.uerst.write(|w| w.bits(1)) };
                 unsafe { usb.uerst.write(|w| w.bits(0)) };
 
@@ -413,8 +410,7 @@ fn usb_control_request(
                         }
                     }
                     usb.ueintx.modify(|_, w| w.txini().clear_bit());
-                    let r = configure_endpoint(usb, 0x83, 8, 3, true); // KEYBOARD_ENDPOINT_NUM
-                    if r != 0 {
+                    if configure_endpoint(usb, 0x83, 8, 3, true) {
                         unsafe { usb.uerst.write(|w| w.bits(0x08)) }; // EP3リセット
                         unsafe { usb.uerst.write(|w| w.bits(0)) };
                         DEVICE_STATUS.store(DeviceState::Configured as u8, Ordering::Relaxed);
