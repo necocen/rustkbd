@@ -754,13 +754,6 @@ progmem! {
         0x75, 0x08, 0x15, 0x00, 0x25, 0x65, 0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00, 0xC0,
     ];
 
-    static progmem DEBUG_DESCR: DebugDescriptor = DebugDescriptor {
-        bLength: core::mem::size_of::<DebugDescriptor>() as u8,
-        bDescriptorType: 10,
-        bDebugInEndpoint: 1,
-        bDebugOutEndpoint: 1,
-    };
-
     static progmem STRINGS: [&str; 3] = ["necocen", "necoboard", "17"];
     static progmem STRING_DESCR0: [u8; 4] = [0x04, 0x03, 0x09, 0x04]; // lang id: US English
 }
