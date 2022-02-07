@@ -4,6 +4,7 @@
 extern crate panic_halt;
 
 use core::{
+    borrow::Borrow,
     cell::RefCell,
     intrinsics::copy_nonoverlapping,
     sync::atomic::{AtomicU8, Ordering},
@@ -13,7 +14,10 @@ use atmega_hal::{
     clock::MHz16,
     delay::Delay,
     pac, pins,
-    port::{mode::Output, Pin, PB5, PB6},
+    port::{
+        mode::{Input, Output},
+        Pin, PB1, PB5, PB6,
+    },
     Peripherals,
 };
 use avr_device::interrupt::{self, Mutex};
@@ -24,6 +28,7 @@ static MY_USB: Mutex<RefCell<Option<pac::USB_DEVICE>>> = Mutex::new(RefCell::new
 static MY_PLL: Mutex<RefCell<Option<pac::PLL>>> = Mutex::new(RefCell::new(None));
 static MY_B5: Mutex<RefCell<Option<Pin<Output, PB5>>>> = Mutex::new(RefCell::new(None));
 static MY_B6: Mutex<RefCell<Option<Pin<Output, PB6>>>> = Mutex::new(RefCell::new(None));
+static MY_B1: Mutex<RefCell<Option<Pin<Input, PB1>>>> = Mutex::new(RefCell::new(None));
 static DEVICE_STATUS: AtomicU8 = AtomicU8::new(DeviceState::Unattached as u8);
 static KEYBOARD_PROTOCOL: AtomicU8 = AtomicU8::new(0);
 static KEYBOARD_IDLE_VALUE: AtomicU8 = AtomicU8::new(125);
@@ -111,6 +116,9 @@ fn main() -> ! {
     interrupt::free(|cs| {
         MY_USB.borrow(cs).replace(Some(dev));
         MY_PLL.borrow(cs).replace(Some(pll));
+        MY_B1
+            .borrow(cs)
+            .replace(Some(pins.pb1.into_pull_up_input().forget_imode()));
         MY_B5.borrow(cs).replace(Some(pins.pb5.into_output()));
         MY_B6.borrow(cs).replace(Some(pins.pb6.into_output()));
     });
@@ -173,10 +181,14 @@ fn usb_send() {
         unsafe { usb.uenum.write(|w| w.bits(3)) }; // KEYBOARD_ENDPOINT_NUM
         while usb.ueintx.read().rwal().bit_is_clear() {}
         MY_B6.borrow(cs).borrow_mut().as_mut().unwrap().toggle();
+        let b1 = MY_B1.borrow(cs).borrow();
+        let b1 = b1.as_ref().unwrap();
+        let b1_is_down = b1.is_low();
         unsafe {
             usb.uedatx.write(|w| w.bits(0)); // keyboard_modifier
             usb.uedatx.write(|w| w.bits(0)); // 0
-            usb.uedatx.write(|w| w.bits(0x04)); // pressed_keys[0] 'a'
+            usb.uedatx
+                .write(|w| w.bits(if b1_is_down { 0x04 } else { 0 })); // pressed_keys[0] 'a'
             usb.uedatx.write(|w| w.bits(0)); // [1]
             usb.uedatx.write(|w| w.bits(0)); // [2]
             usb.uedatx.write(|w| w.bits(0)); // [3]
