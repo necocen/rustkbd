@@ -124,8 +124,9 @@ fn main() -> ! {
     }
     loop {
         // 1秒待機
-        delay.delay_ms(32u16);
         usb_send();
+        let idle = (KEYBOARD_IDLE_VALUE.load(Ordering::Relaxed) as u16) << 2;
+        delay.delay_ms(idle);
     }
 }
 
@@ -467,14 +468,13 @@ fn usb_control_request(
                     0x09 => {
                         // SET_REPORT
                         while usb.ueintx.read().rxouti().bit_is_clear() {}
-                        // TODO: keyboard_leds ?
+                        // TODO: num_lockなど
                         usb.ueintx
                             .modify(|_, w| w.txini().clear_bit().rxouti().clear_bit());
                     }
                     0x0a => {
                         // SET_IDLE
-                        KEYBOARD_IDLE_VALUE.store(request.wValue as u8, Ordering::Relaxed);
-                        // TODO: current_idle = 0;
+                        KEYBOARD_IDLE_VALUE.store((request.wValue >> 8) as u8, Ordering::Relaxed);
                         usb.ueintx.modify(|_, w| w.txini().clear_bit());
                     }
                     0x0b => {
