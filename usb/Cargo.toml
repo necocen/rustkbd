@@ -1,0 +1,12 @@
+[package]
+name = "usb"
+version = "0.0.0"
+authors = ["necocen <necocen@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+atmega-hal = { git = "https://github.com/Rahix/avr-hal", branch = "main", features = ["atmega32u4", "rt"] }
+avr-progmem = "0.1.2"
+avr-device = "0.3.2"

@@ -1,0 +1,19 @@
+[package]
+name = "main"
+version = "0.0.0"
+authors = ["necocen <necocen@gmail.com>"]
+edition = "2018"
+
+[[bin]]
+name = "rustkbd"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+panic-halt = "0.2.0"
+atmega-hal = { git = "https://github.com/Rahix/avr-hal", branch = "main", features = ["atmega32u4", "rt"] }
+avr_delay = "0.3.2"
+avr-device = "0.3.2"
+embedded-hal = "0.2.6"
+usb = { path = "../usb" }

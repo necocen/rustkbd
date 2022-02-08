@@ -1,203 +1,93 @@
-#![no_std]
-#![no_main]
-#![feature(abi_avr_interrupt)]
-extern crate panic_halt;
-
 use core::{
-    borrow::Borrow,
     cell::RefCell,
     intrinsics::copy_nonoverlapping,
     sync::atomic::{AtomicU8, Ordering},
 };
 
-use atmega_hal::{
-    clock::MHz16,
-    delay::Delay,
-    pac, pins,
-    port::{
-        mode::{Input, Output},
-        Pin, PB1, PB5, PB6,
-    },
-    Peripherals,
-};
+use atmega_hal::pac::{PLL, USB_DEVICE};
 use avr_device::interrupt::{self, Mutex};
 use avr_progmem::progmem;
-use embedded_hal::{blocking::delay::DelayMs, prelude::_embedded_hal_spi_FullDuplex};
+use descriptors::{
+    ConfigDescriptor, DeviceDescriptor, HidDescriptor, HidFunction, HidReport, InterfaceDescriptor,
+    USBConfiguration,
+};
+pub use device_state::DeviceState;
+pub use setup_packet::SetupPacket;
 
-static MY_USB: Mutex<RefCell<Option<pac::USB_DEVICE>>> = Mutex::new(RefCell::new(None));
-static MY_PLL: Mutex<RefCell<Option<pac::PLL>>> = Mutex::new(RefCell::new(None));
-static MY_B5: Mutex<RefCell<Option<Pin<Output, PB5>>>> = Mutex::new(RefCell::new(None));
-static MY_B6: Mutex<RefCell<Option<Pin<Output, PB6>>>> = Mutex::new(RefCell::new(None));
-static MY_B1: Mutex<RefCell<Option<Pin<Input, PB1>>>> = Mutex::new(RefCell::new(None));
+use self::{
+    descriptors::EndpointDescriptor,
+    request_type::{Direction, Recipient, Type},
+};
+
+mod descriptors;
+mod device_state;
+mod request_type;
+mod setup_packet;
+
+static MY_USB: Mutex<RefCell<Option<USB_DEVICE>>> = Mutex::new(RefCell::new(None));
+static MY_PLL: Mutex<RefCell<Option<PLL>>> = Mutex::new(RefCell::new(None));
 static DEVICE_STATUS: AtomicU8 = AtomicU8::new(DeviceState::Unattached as u8);
 static KEYBOARD_PROTOCOL: AtomicU8 = AtomicU8::new(0);
 static KEYBOARD_IDLE_VALUE: AtomicU8 = AtomicU8::new(125);
 
-fn get_device_status() -> DeviceState {
-    unsafe { core::mem::transmute(DEVICE_STATUS.load(Ordering::Relaxed)) }
-}
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct UsbDevice {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-#[repr(u8)]
-enum DeviceState {
-    Unattached = 0u8,
-    Reset,
-    Powered,
-    Suspend,
-    Addressed,
-    Configured,
-}
+impl UsbDevice {
+    pub fn new(usb: USB_DEVICE, pll: PLL) -> Self {
+        interrupt::free(|cs| {
+            usb.usbcon.reset();
+            usb.uhwcon.reset();
+            usb.udcon.reset();
+            usb.udien.reset();
+            // 一瞬切った方がいいらしい cf. https://kampi.gitbook.io/avr/lets-use-usb/initialize-the-usb-as-a-usb-device
+            usb.usbcon.modify(|_, w| w.usbe().clear_bit());
+            usb.usbcon.modify(|_, w| w.usbe().set_bit());
+            // After a reset, the USB device mode is automatically activated because the external UID pin of the microcontroller is deactivated (UIDE = 0) and the UIMOD bit is set. Furthermore, the PLL for the USB module gets turned off during a reset by setting the FRZCLK bit in the USBCON register. This bit must also be deleted after a reset.
+            usb.usbcon.modify(|_, w| w.frzclk().clear_bit());
+            // It is recommended to use the internal voltage regulator to ensure the supply voltage of the data lines.
+            usb.uhwcon.modify(|_, w| w.uvrege().set_bit());
+            // In order for the microcontroller to attach to the USB and the host to recognize the new device, the VBUS pad must also be activated via the OTGPADE bit in the USBCON register.
+            usb.usbcon.modify(|_, w| w.otgpade().set_bit());
+            // low speed mode (full speed modeのときは外部発振子が必要らしい？)←Pro Microなので載ってると思われる。が開発中はデバッグしやすいようにlsmでやる
+            usb.udcon.modify(|_, w| w.lsm().set_bit());
+            // Only the VBUS interrupt is currently required, as this is used for plug-in detection. This interrupt is activated via the VBUSTE bit in the USBCON register.
+            usb.usbcon.modify(|_, w| w.vbuste().set_bit());
+            // The DETACH bit in the UDCON register must be cleared so  the selected pull-up resistor is connected to the corresponding data line and the device is detected by the host.
+            usb.udcon.modify(|_, w| w.detach().clear_bit());
+            // The end of the USB reset can be detected using the EORSTI bit in the UDINT register.
+            usb.udien.modify(|_, w| w.eorste().set_bit());
+            MY_USB.borrow(cs).replace(Some(usb));
+            MY_PLL.borrow(cs).replace(Some(pll));
+        });
+        UsbDevice {}
+    }
 
-fn configure_endpoint(
-    dev: &pac::USB_DEVICE,
-    ep: u8,
-    size: u8,
-    ep_type: u8,
-    double_bank: bool,
-) -> bool {
-    let addr_tmp = ep & 0x0F;
-    for i in addr_tmp..0x07 {
-        unsafe { dev.uenum.write(|w| w.bits(i)) };
+    pub fn get_status(&self) -> DeviceState {
+        get_device_status()
+    }
 
-        if i == addr_tmp {
-            let mut tmp = 0x08u8;
-            let mut epsize = 0x00u8;
-            while tmp < size {
-                epsize += 1;
-                tmp <<= 1;
-            }
-            dev.ueconx.modify(|_, w| w.epen().clear_bit());
-            dev.uecfg1x.modify(|_, w| w.alloc().clear_bit());
-            dev.ueconx.modify(|_, w| w.epen().set_bit());
-            dev.uecfg0x.modify(|_, w| w.eptype().bits(ep_type));
-            if ep & 0x80 != 0 {
-                // IN Endpoint
-                dev.uecfg0x.modify(|_, w| w.epdir().set_bit());
-            }
-            dev.uecfg1x
-                .write(|w| w.epsize().bits(epsize).alloc().set_bit());
-            if double_bank {
-                dev.uecfg1x.modify(|_, w| w.epbk().bits(1));
-            }
+    pub fn send(&self, data: [u8; 8]) {
+        if self.get_status() != DeviceState::Configured {
+            return;
+        }
+        interrupt::free(|cs| {
+            let usb = MY_USB.borrow(cs).borrow();
+            let usb = usb.as_ref().unwrap();
+            let current_ep = usb.uenum.read().bits();
+            unsafe { usb.uenum.write(|w| w.bits(3)) }; // KEYBOARD_ENDPOINT_NUM
+            while usb.ueintx.read().rwal().bit_is_clear() {}
+
             unsafe {
-                dev.ueienx.write(|w| w.bits(0));
+                for byte in data.iter() {
+                    usb.uedatx.write(|w| w.bits(*byte));
+                }
             }
-        } else {
-            if dev.uecfg1x.read().alloc().bit_is_clear() {
-                continue;
-            }
-            let uecfg1x_tmp = dev.uecfg1x.read().bits();
-            dev.ueconx.modify(|_, w| w.epen().clear_bit());
-            dev.uecfg1x.modify(|_, w| w.alloc().clear_bit());
-            dev.ueconx.modify(|_, w| w.epen().set_bit());
-            unsafe {
-                dev.uecfg1x.write(|w| w.bits(uecfg1x_tmp));
-            }
-        }
-
-        if dev.uesta0x.read().cfgok().bit_is_clear() {
-            // failed
-            return false;
-        }
+            usb.ueintx.modify(|_, w| w.fifocon().clear_bit());
+            unsafe { usb.uenum.write(|w| w.bits(current_ep)) };
+        });
     }
-    unsafe { dev.uenum.write(|w| w.bits(addr_tmp)) };
-    true
-}
-
-#[atmega_hal::entry]
-fn main() -> ! {
-    let dp = Peripherals::take().unwrap();
-    let dev = dp.USB_DEVICE;
-    let pll = dp.PLL;
-    let pins = pins!(dp);
-    let mut delay = Delay::<MHz16>::new();
-
-    interrupt::free(|cs| {
-        MY_USB.borrow(cs).replace(Some(dev));
-        MY_PLL.borrow(cs).replace(Some(pll));
-        MY_B1
-            .borrow(cs)
-            .replace(Some(pins.pb1.into_pull_up_input().forget_imode()));
-        MY_B5.borrow(cs).replace(Some(pins.pb5.into_output()));
-        MY_B6.borrow(cs).replace(Some(pins.pb6.into_output()));
-    });
-
-    usb_init();
-
-    keys_init();
-
-    unsafe {
-        interrupt::enable();
-    }
-    loop {
-        // 1秒待機
-        usb_send();
-        let idle = (KEYBOARD_IDLE_VALUE.load(Ordering::Relaxed) as u16) << 2;
-        delay.delay_ms(idle);
-    }
-}
-
-fn usb_init() {
-    interrupt::free(|cs| {
-        let usb = MY_USB.borrow(cs).borrow();
-        let usb = usb.as_ref().unwrap();
-        usb.usbcon.reset();
-        usb.uhwcon.reset();
-        usb.udcon.reset();
-        usb.udien.reset();
-        // 一瞬切った方がいいらしい cf. https://kampi.gitbook.io/avr/lets-use-usb/initialize-the-usb-as-a-usb-device
-        usb.usbcon.modify(|_, w| w.usbe().clear_bit());
-        usb.usbcon.modify(|_, w| w.usbe().set_bit());
-        // After a reset, the USB device mode is automatically activated because the external UID pin of the microcontroller is deactivated (UIDE = 0) and the UIMOD bit is set. Furthermore, the PLL for the USB module gets turned off during a reset by setting the FRZCLK bit in the USBCON register. This bit must also be deleted after a reset.
-        usb.usbcon.modify(|_, w| w.frzclk().clear_bit());
-        // It is recommended to use the internal voltage regulator to ensure the supply voltage of the data lines.
-        usb.uhwcon.modify(|_, w| w.uvrege().set_bit());
-        // In order for the microcontroller to attach to the USB and the host to recognize the new device, the VBUS pad must also be activated via the OTGPADE bit in the USBCON register.
-        usb.usbcon.modify(|_, w| w.otgpade().set_bit());
-        // low speed mode (full speed modeのときは外部発振子が必要らしい？)←Pro Microなので載ってると思われる。が開発中はデバッグしやすいようにlsmでやる
-        usb.udcon.modify(|_, w| w.lsm().set_bit());
-        // Only the VBUS interrupt is currently required, as this is used for plug-in detection. This interrupt is activated via the VBUSTE bit in the USBCON register.
-        usb.usbcon.modify(|_, w| w.vbuste().set_bit());
-        // The DETACH bit in the UDCON register must be cleared so  the selected pull-up resistor is connected to the corresponding data line and the device is detected by the host.
-        usb.udcon.modify(|_, w| w.detach().clear_bit());
-        // The end of the USB reset can be detected using the EORSTI bit in the UDINT register.
-        usb.udien.modify(|_, w| w.eorste().set_bit());
-    });
-}
-
-fn keys_init() {
-    interrupt::free(|cs| {});
-}
-
-fn usb_send() {
-    if get_device_status() != DeviceState::Configured {
-        return;
-    }
-    interrupt::free(|cs| {
-        let usb = MY_USB.borrow(cs).borrow();
-        let usb = usb.as_ref().unwrap();
-        let current_ep = usb.uenum.read().bits();
-        unsafe { usb.uenum.write(|w| w.bits(3)) }; // KEYBOARD_ENDPOINT_NUM
-        while usb.ueintx.read().rwal().bit_is_clear() {}
-        MY_B6.borrow(cs).borrow_mut().as_mut().unwrap().toggle();
-        let b1 = MY_B1.borrow(cs).borrow();
-        let b1 = b1.as_ref().unwrap();
-        let b1_is_down = b1.is_low();
-        unsafe {
-            usb.uedatx.write(|w| w.bits(0)); // keyboard_modifier
-            usb.uedatx.write(|w| w.bits(0)); // 0
-            usb.uedatx
-                .write(|w| w.bits(if b1_is_down { 0x04 } else { 0 })); // pressed_keys[0] 'a'
-            usb.uedatx.write(|w| w.bits(0)); // [1]
-            usb.uedatx.write(|w| w.bits(0)); // [2]
-            usb.uedatx.write(|w| w.bits(0)); // [3]
-            usb.uedatx.write(|w| w.bits(0)); // [4]
-            usb.uedatx.write(|w| w.bits(0)); // [5]
-        }
-        usb.ueintx.modify(|_, w| w.fifocon().clear_bit());
-        unsafe { usb.uenum.write(|w| w.bits(current_ep)) };
-    });
 }
 
 #[avr_device::interrupt(atmega32u4)]
@@ -229,10 +119,7 @@ fn USB_GEN() {
 
                 // re-enable receive setup packet interrupt
                 usb.ueienx.write(|w| w.rxstpe().set_bit());
-                MY_B5.borrow(cs).borrow_mut().as_mut().unwrap().set_high();
                 DEVICE_STATUS.store(DeviceState::Reset as u8, Ordering::Relaxed);
-            } else {
-                MY_B6.borrow(cs).borrow_mut().as_mut().unwrap().set_high();
             }
         }
     });
@@ -250,33 +137,69 @@ fn USB_COM() {
         unsafe { usb.uenum.write(|w| w.bits(0)) }; // 0番エンドポイントを操作
         if usb.ueintx.read().rxstpi().bit_is_set() {
             // setup
-            usb_control_request(
-                usb,
-                MY_B5.borrow(cs).borrow_mut().as_mut().unwrap(),
-                MY_B6.borrow(cs).borrow_mut().as_mut().unwrap(),
-            );
+            usb_control_request(usb);
         }
         unsafe { usb.uenum.write(|w| w.bits(current_endpoint)) }; // 通らない？
     });
 }
 
-#[inline(always)]
-fn usb_recv_request(usb: &pac::USB_DEVICE, b5: &mut Pin<Output, PB5>) -> SetupPacket {
-    let mut buf = [0u8; core::mem::size_of::<SetupPacket>()];
-    for b in buf.iter_mut() {
-        *b = usb.uedatx.read().bits();
-    }
-    usb.ueintx.modify(|_, w| w.rxstpi().clear_bit());
-    unsafe { core::mem::transmute(buf) }
+fn get_device_status() -> DeviceState {
+    unsafe { core::mem::transmute(DEVICE_STATUS.load(Ordering::Relaxed)) }
 }
 
-fn usb_control_request(
-    usb: &pac::USB_DEVICE,
-    b5: &mut Pin<Output, PB5>,
-    b6: &mut Pin<Output, PB6>,
-) {
+fn configure_endpoint(usb: &USB_DEVICE, ep: u8, size: u8, ep_type: u8, double_bank: bool) -> bool {
+    let addr_tmp = ep & 0x0F;
+    for i in addr_tmp..0x07 {
+        unsafe { usb.uenum.write(|w| w.bits(i)) };
+
+        if i == addr_tmp {
+            let mut tmp = 0x08u8;
+            let mut epsize = 0x00u8;
+            while tmp < size {
+                epsize += 1;
+                tmp <<= 1;
+            }
+            usb.ueconx.modify(|_, w| w.epen().clear_bit());
+            usb.uecfg1x.modify(|_, w| w.alloc().clear_bit());
+            usb.ueconx.modify(|_, w| w.epen().set_bit());
+            usb.uecfg0x.modify(|_, w| w.eptype().bits(ep_type));
+            if ep & 0x80 != 0 {
+                // IN Endpoint
+                usb.uecfg0x.modify(|_, w| w.epdir().set_bit());
+            }
+            usb.uecfg1x
+                .write(|w| w.epsize().bits(epsize).alloc().set_bit());
+            if double_bank {
+                usb.uecfg1x.modify(|_, w| w.epbk().bits(1));
+            }
+            unsafe {
+                usb.ueienx.write(|w| w.bits(0));
+            }
+        } else {
+            if usb.uecfg1x.read().alloc().bit_is_clear() {
+                continue;
+            }
+            let uecfg1x_tmp = usb.uecfg1x.read().bits();
+            usb.ueconx.modify(|_, w| w.epen().clear_bit());
+            usb.uecfg1x.modify(|_, w| w.alloc().clear_bit());
+            usb.ueconx.modify(|_, w| w.epen().set_bit());
+            unsafe {
+                usb.uecfg1x.write(|w| w.bits(uecfg1x_tmp));
+            }
+        }
+
+        if usb.uesta0x.read().cfgok().bit_is_clear() {
+            // failed
+            return false;
+        }
+    }
+    unsafe { usb.uenum.write(|w| w.bits(addr_tmp)) };
+    true
+}
+
+fn usb_control_request(usb: &USB_DEVICE) {
     let mut buf = [0u8; 64];
-    let request = usb_recv_request(usb, b5);
+    let request = SetupPacket::read(usb);
 
     match request.bRequest {
         0 => {
@@ -296,7 +219,6 @@ fn usb_control_request(
                 && ty.request_type() == Type::Standard
                 && ty.recipient() == Recipient::Device
             {
-                //while usb.ueintx.read().txini().bit_is_clear() {}
                 unsafe { usb.udaddr.write(|w| w.bits((request.wValue & 0x7f) as u8)) };
                 usb.ueintx.modify(|_, w| w.txini().clear_bit());
                 while usb.ueintx.read().txini().bit_is_clear() {
@@ -376,7 +298,6 @@ fn usb_control_request(
             let len = core::cmp::min(core::cmp::min(request.wLength as usize, 255), bytes.len());
             let bytes = &bytes[..len];
             let mut iter = bytes.iter().peekable();
-            //usb.ueintx.modify(|_, w| w.txini().clear_bit());
             while iter.peek().is_some() {
                 if usb.ueintx.read().rxouti().bit_is_set() {
                     break;
@@ -502,189 +423,6 @@ fn usb_control_request(
     }
 }
 
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct DeviceDescriptor {
-    pub bLength: u8,
-    pub bDescriptorType: u8,
-    pub bcdUSB: u16,
-    pub bDeviceClass: u8,
-    pub bDeviceSubClass: u8,
-    pub bDeviceProtocol: u8,
-    pub bMaxPacketSize0: u8,
-    pub idVendor: u16,
-    pub idProduct: u16,
-    pub bcdDevice: u16,
-    pub iManufacturer: u8,
-    pub iProduct: u8,
-    pub iSerialNumber: u8,
-    pub bNumConfigurations: u8,
-}
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct ConfigDescriptor {
-    pub bLength: u8,
-    pub bDescriptorType: u8,
-    pub wTotalLength: u16,
-    pub bNumInterfaces: u8,
-    pub bConfigurationValue: u8,
-    pub iConfiguration: u8,
-    pub bmAttributes: u8,
-    pub bMaxPower: u8,
-}
-
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct InterfaceDescriptor {
-    pub bLength: u8,
-    pub bDescriptorType: u8,
-    pub bInterfaceNumber: u8,
-    pub bAlternateSetting: u8,
-    pub bNumEndpoints: u8,
-    pub bInterfaceClass: u8,
-    pub bInterfaceSubClass: u8,
-    pub bInterfaceProtocol: u8,
-    pub iInterface: u8,
-}
-
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct EndpointDescriptor {
-    pub bLength: u8,
-    pub bDescriptorType: u8,
-    pub bEndpointAddress: u8,
-    pub bmAttributes: u8,
-    pub wMaxPacketSize: u16,
-    pub bInterval: u8,
-}
-
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct HidDescriptor {
-    pub bLength: u8,
-    pub bDescriptorType: u8,
-    pub bcdHID: u16,
-    pub bCountryCode: u8,
-    pub bNumDescriptors: u8,
-}
-
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct DebugDescriptor {
-    pub bLength: u8,
-    pub bDescriptorType: u8,
-    pub bDebugInEndpoint: u8,
-    pub bDebugOutEndpoint: u8,
-}
-
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct HidReport {
-    pub bReportDescriptorType: u8,
-    pub wDescriptorLength: u16,
-}
-
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct HidFunction {
-    pub hid_descriptor: HidDescriptor,
-    pub hid_report: HidReport,
-}
-#[repr(packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct USBConfiguration {
-    pub config: ConfigDescriptor,
-    pub kbd_interf: InterfaceDescriptor,
-    pub hid_func: HidFunction,
-    pub hid_endpoint: EndpointDescriptor,
-}
-
-#[derive(Debug, PartialEq)]
-enum Direction {
-    HostToDevice,
-    DeviceToHost,
-}
-
-#[derive(Debug, PartialEq)]
-#[allow(dead_code)]
-enum Type {
-    Standard,
-    Class,
-    Vendor,
-    Reserved,
-}
-
-#[derive(Debug, PartialEq)]
-#[allow(dead_code)]
-enum Recipient {
-    Device,
-    Interface,
-    Endpoint,
-    Other,
-    Reserved,
-}
-#[repr(packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct BmRequestType(u8);
-impl BmRequestType {
-    #[inline]
-    fn bits(&self) -> u8 {
-        self.0
-    }
-
-    #[inline]
-    fn direction(&self) -> Direction {
-        if self.bits() & 0x80 == 0 {
-            Direction::HostToDevice
-        } else {
-            Direction::DeviceToHost
-        }
-    }
-
-    #[inline]
-    #[allow(dead_code)]
-    fn request_type(&self) -> Type {
-        match (self.bits() >> 5) & 0b11 {
-            0 => Type::Standard,
-            1 => Type::Class,
-            2 => Type::Vendor,
-            3 => Type::Reserved,
-            _ => unreachable!(),
-        }
-    }
-
-    #[inline]
-    #[allow(dead_code)]
-    fn recipient(&self) -> Recipient {
-        match self.bits() & 0b11111 {
-            0 => Recipient::Device,
-            1 => Recipient::Interface,
-            2 => Recipient::Endpoint,
-            3 => Recipient::Other,
-            _ => Recipient::Reserved,
-        }
-    }
-}
-
-#[repr(packed)]
-#[allow(non_snake_case)]
-#[derive(Debug, Clone, Copy)]
-pub struct SetupPacket {
-    pub bmRequestType: BmRequestType,
-    pub bRequest: u8,
-    pub wValue: u16,
-    pub wIndex: u16,
-    pub wLength: u16,
-}
-
 progmem! {
     static progmem DEVICE_DESCR: DeviceDescriptor = DeviceDescriptor {
         bLength: core::mem::size_of::<DeviceDescriptor>() as u8,
@@ -758,7 +496,7 @@ progmem! {
     static progmem STRING_DESCR0: [u8; 4] = [0x04, 0x03, 0x09, 0x04]; // lang id: US English
 }
 
-pub fn build_string_descr(buf: &mut [u8], data: &str) -> Option<usize> {
+fn build_string_descr(buf: &mut [u8], data: &str) -> Option<usize> {
     let utf16 = data.encode_utf16();
 
     let iter = buf[2..]
