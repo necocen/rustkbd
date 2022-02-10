@@ -11,10 +11,17 @@ use atmega_hal::{
         mode::{Input, Output, PullUp},
         Dynamic, Pin,
     },
-    Peripherals,
+    I2c, Peripherals,
 };
 use avr_device::interrupt;
+use embedded_graphics::{
+    image::{Image, ImageRaw},
+    pixelcolor::BinaryColor,
+    prelude::Point,
+    prelude::*,
+};
 use embedded_hal::blocking::delay::DelayMs;
+use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 use usb::usb_device::UsbDevice;
 
 static KEY_CODES: [[u8; 2]; 2] = [[0x11, 0x08], [0x06, 0x12]];
@@ -29,6 +36,20 @@ fn main() -> ! {
     let mut b4 = pins.pb4.into_output_high().downgrade();
     let mut b5 = pins.pb5.into_output_high().downgrade();
     let mut delay = Delay::<MHz16>::new();
+    let i2c = I2c::<MHz16>::new(
+        dp.TWI,
+        pins.pd1.into_pull_up_input(),
+        pins.pd0.into_pull_up_input(),
+        51200,
+    );
+    let interface = I2CDisplayInterface::new(i2c);
+    let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
+        .into_buffered_graphics_mode();
+    display.init().unwrap();
+    let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("./rust.raw"), 64);
+    let im = Image::new(&raw, Point::new(32, 0));
+    im.draw(&mut display).unwrap();
+    display.flush().unwrap();
 
     unsafe {
         interrupt::enable();

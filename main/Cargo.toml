@@ -17,3 +17,5 @@ avr_delay = "0.3.2"
 avr-device = "0.3.2"
 embedded-hal = "0.2.6"
 usb = { path = "../usb" }
+ssd1306 = "0.7.0"
+embedded-graphics = "0.7.1"
