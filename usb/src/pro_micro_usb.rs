@@ -7,20 +7,19 @@ use core::{
 use atmega_hal::pac::{PLL, USB_DEVICE};
 use avr_device::interrupt::{self, Mutex};
 use avr_progmem::progmem;
-use descriptors::{
-    ConfigDescriptor, DeviceDescriptor, HidDescriptor, HidFunction, HidReport, InterfaceDescriptor,
-    USBConfiguration,
-};
-pub use device_state::DeviceState;
-pub use setup_packet::SetupPacket;
+use keyboard_core::usb::DeviceState;
 
 use self::{
-    descriptors::EndpointDescriptor,
+    descriptors::{
+        ConfigDescriptor, DeviceDescriptor, EndpointDescriptor, HidDescriptor, HidFunction,
+        HidReport, InterfaceDescriptor, USBConfiguration,
+    },
     request_type::{Direction, Recipient, Type},
+    setup_packet::SetupPacket,
 };
 
 mod descriptors;
-mod device_state;
+
 mod request_type;
 mod setup_packet;
 
@@ -32,9 +31,9 @@ static KEYBOARD_IDLE_VALUE: AtomicU8 = AtomicU8::new(125);
 
 #[derive(Debug)]
 #[non_exhaustive]
-pub struct UsbDevice {}
+pub struct ProMicroUsb {}
 
-impl UsbDevice {
+impl ProMicroUsb {
     pub fn new(usb: USB_DEVICE, pll: PLL) -> Self {
         interrupt::free(|cs| {
             usb.usbcon.reset();
@@ -61,14 +60,16 @@ impl UsbDevice {
             MY_USB.borrow(cs).replace(Some(usb));
             MY_PLL.borrow(cs).replace(Some(pll));
         });
-        UsbDevice {}
+        ProMicroUsb {}
     }
+}
 
-    pub fn get_status(&self) -> DeviceState {
+impl keyboard_core::usb::UsbController for ProMicroUsb {
+    fn get_status(&self) -> DeviceState {
         get_device_status()
     }
 
-    pub fn send(&self, data: [u8; 8]) {
+    fn send(&self, data: [u8; 8]) {
         if self.get_status() != DeviceState::Configured {
             return;
         }

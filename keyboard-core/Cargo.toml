@@ -1,0 +1,11 @@
+[package]
+name = "keyboard-core"
+version = "0.0.0"
+authors = ["necocen <necocen@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+heapless = "0.7.10"
+embedded-hal = "0.2.6"

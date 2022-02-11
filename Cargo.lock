@@ -37,15 +37,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "avr-config"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abb2276df19ea0f25741658d218861b8a24d78eaf926127eb2384f0927f9ab9f"
-dependencies = [
- "const_env--value",
-]
-
-[[package]]
 name = "avr-device"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -89,15 +80,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c132b5cb3bb60774763e02c965e7f8959a7f225e22291ada078968887fe8248c"
 dependencies = [
  "cfg-if 0.1.10",
-]
-
-[[package]]
-name = "avr_delay"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3240ca4376ed463b9636c8363dc9b6bc2a76f92f73c6ea52701c28fabf6ef7d7"
-dependencies = [
- "avr-config",
 ]
 
 [[package]]
@@ -156,26 +138,6 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
-name = "const_env--value"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ade503a5095050a5bf3feb8ae71842fb49dfc4af01dd613beb4f00bb7144645"
-dependencies = [
- "const_env_impl--value",
-]
-
-[[package]]
-name = "const_env_impl--value"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a046e06596453266c54d3eb790813fd047494fc1d04d5077fba628bf84e1b83a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "cortex-m"
@@ -292,6 +254,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyboard-core"
+version = "0.0.0"
+dependencies = [
+ "embedded-hal",
+ "heapless",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -312,10 +282,9 @@ version = "0.0.0"
 dependencies = [
  "atmega-hal",
  "avr-device",
- "avr_delay",
  "embedded-graphics",
- "embedded-hal",
  "heapless",
+ "keyboard-core",
  "panic-halt",
  "ssd1306",
  "usb",
@@ -542,6 +511,7 @@ dependencies = [
  "atmega-hal",
  "avr-device",
  "avr-progmem",
+ "keyboard-core",
 ]
 
 [[package]]
