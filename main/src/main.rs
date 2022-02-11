@@ -3,6 +3,8 @@
 #![feature(abi_avr_interrupt)]
 extern crate panic_halt;
 
+use core::cell::RefCell;
+
 use atmega_hal::{
     clock::MHz16,
     delay::Delay,
@@ -33,9 +35,10 @@ fn main() -> ! {
     let pins = pins!(dp);
     let b2 = pins.pb2.into_pull_up_input().downgrade();
     let b6 = pins.pb6.into_pull_up_input().downgrade();
-    let mut b4 = pins.pb4.into_output_high().downgrade();
-    let mut b5 = pins.pb5.into_output_high().downgrade();
+    let b4 = pins.pb4.into_output_high().downgrade();
+    let b5 = pins.pb5.into_output_high().downgrade();
     let mut delay = Delay::<MHz16>::new();
+    let keyboard = KeyMatrix::new([b2, b6], [b4, b5]);
     let i2c = I2c::<MHz16>::new(
         dp.TWI,
         pins.pd1.into_pull_up_input(),
@@ -57,7 +60,16 @@ fn main() -> ! {
 
     let mut keys = [0u8; 8];
     loop {
-        matrix_scan(&b2, &mut b4, &mut b5, &b6, &mut keys);
+        keys[0] = 0;
+        keys[1] = 0;
+        let scan = keyboard.scan();
+        for i in 0..6 {
+            if let Some((col, row)) = scan[i] {
+                keys[i + 2] = KEY_CODES[row as usize][col as usize];
+            } else {
+                keys[i + 2] = 0;
+            }
+        }
         usb.send(keys);
         // FIXME: idleを適切に設定する方法がない
         //let idle = (KEYBOARD_IDLE_VALUE.load(Ordering::Relaxed) as u16) << 2;
@@ -65,27 +77,46 @@ fn main() -> ! {
     }
 }
 
-fn matrix_scan(
-    b2: &Pin<Input<PullUp>, Dynamic>,
-    b4: &mut Pin<Output, Dynamic>,
-    b5: &mut Pin<Output, Dynamic>,
-    b6: &Pin<Input<PullUp>, Dynamic>,
-    keys: &mut [u8; 8],
-) {
-    let input = [b2, b6];
-    let output = [b4, b5];
-    let mut index = 2usize;
-    for key in keys.iter_mut() {
-        *key = 0;
-    }
-    for i in 0..2 {
-        output[i].set_low();
-        for j in 0..2 {
-            if input[j].is_low() {
-                keys[index] = KEY_CODES[i][j];
-                index += 1;
-            }
+trait KeySwitches {
+    type Identifier: Copy + Sized;
+    fn scan(&self) -> [Option<Self::Identifier>; 6];
+}
+
+struct KeyMatrix<const COLS: usize, const ROWS: usize> {
+    inputs: [Pin<Input<PullUp>, Dynamic>; ROWS],
+    outputs: RefCell<[Pin<Output, Dynamic>; COLS]>,
+}
+
+impl<const COLS: usize, const ROWS: usize> KeyMatrix<COLS, ROWS> {
+    pub fn new(
+        inputs: [Pin<Input<PullUp>, Dynamic>; ROWS],
+        outputs: [Pin<Output, Dynamic>; COLS],
+    ) -> Self {
+        KeyMatrix {
+            inputs,
+            outputs: RefCell::new(outputs),
         }
-        output[i].set_high();
+    }
+}
+
+impl<const COLS: usize, const ROWS: usize> KeySwitches for KeyMatrix<COLS, ROWS> {
+    type Identifier = (u8, u8);
+
+    fn scan(&self) -> [Option<Self::Identifier>; 6] {
+        let mut index = 0usize;
+        let mut keys = [Option::<Self::Identifier>::None; 6];
+        let mut outputs = self.outputs.borrow_mut();
+
+        for i in 0..COLS {
+            outputs[i].set_low();
+            for j in 0..ROWS {
+                if self.inputs[j].is_low() {
+                    keys[index] = Some((i as u8, j as u8));
+                    index += 1;
+                }
+            }
+            outputs[i].set_high();
+        }
+        keys
     }
 }
