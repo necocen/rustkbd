@@ -23,6 +23,7 @@ use embedded_graphics::{
     prelude::*,
 };
 use embedded_hal::blocking::delay::DelayMs;
+use heapless::Vec;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 use usb::usb_device::UsbDevice;
 
@@ -58,17 +59,12 @@ fn main() -> ! {
         interrupt::enable();
     }
 
-    let mut keys = [0u8; 8];
     loop {
-        keys[0] = 0;
-        keys[1] = 0;
-        let scan = keyboard.scan();
-        for i in 0..6 {
-            if let Some((col, row)) = scan[i] {
-                keys[i + 2] = KEY_CODES[row as usize][col as usize];
-            } else {
-                keys[i + 2] = 0;
-            }
+        let mut keys = [0u8; 8];
+        let mut i = 2;
+        for (col, row) in keyboard.scan().into_iter() {
+            keys[i] = KEY_CODES[row as usize][col as usize];
+            i += 1;
         }
         usb.send(keys);
         // FIXME: idleを適切に設定する方法がない
@@ -79,7 +75,7 @@ fn main() -> ! {
 
 trait KeySwitches {
     type Identifier: Copy + Sized;
-    fn scan(&self) -> [Option<Self::Identifier>; 6];
+    fn scan(&self) -> Vec<Self::Identifier, 6>;
 }
 
 struct KeyMatrix<const COLS: usize, const ROWS: usize> {
@@ -102,17 +98,15 @@ impl<const COLS: usize, const ROWS: usize> KeyMatrix<COLS, ROWS> {
 impl<const COLS: usize, const ROWS: usize> KeySwitches for KeyMatrix<COLS, ROWS> {
     type Identifier = (u8, u8);
 
-    fn scan(&self) -> [Option<Self::Identifier>; 6] {
-        let mut index = 0usize;
-        let mut keys = [Option::<Self::Identifier>::None; 6];
+    fn scan(&self) -> Vec<Self::Identifier, 6> {
+        let mut keys = Vec::<Self::Identifier, 6>::new();
         let mut outputs = self.outputs.borrow_mut();
 
         for i in 0..COLS {
             outputs[i].set_low();
             for j in 0..ROWS {
                 if self.inputs[j].is_low() {
-                    keys[index] = Some((i as u8, j as u8));
-                    index += 1;
+                    keys.push((i as u8, j as u8)).ok();
                 }
             }
             outputs[i].set_high();

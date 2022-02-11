@@ -19,3 +19,4 @@ embedded-hal = "0.2.6"
 usb = { path = "../usb" }
 ssd1306 = "0.7.0"
 embedded-graphics = "0.7.1"
+heapless = "0.7.10"
