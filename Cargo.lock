@@ -257,6 +257,7 @@ dependencies = [
 name = "keyboard-core"
 version = "0.0.0"
 dependencies = [
+ "embedded-graphics",
  "embedded-hal",
  "heapless",
 ]

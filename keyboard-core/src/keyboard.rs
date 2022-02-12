@@ -1,30 +1,43 @@
+use embedded_graphics::{
+    image::{Image, ImageRaw},
+    pixelcolor::BinaryColor,
+    prelude::Point,
+};
 use embedded_hal::blocking::delay::DelayMs;
 
-use crate::{key_switches::KeySwitches, usart::UsartController, usb::UsbController};
+use crate::{
+    key_switches::KeySwitches, oled::OledModule, usart::UsartController, usb::UsbController,
+};
 
-pub struct Keyboard<K: KeySwitches, U: UsbController, V: UsartController> {
+pub struct Keyboard<K: KeySwitches, U: UsbController, V: UsartController, O: OledModule> {
     key_switches: K,
     usb_controller: U,
     usart_controller: V,
+    oled_module: O,
 }
 
 impl<
         K: KeySwitches<Identifier = (u8, u8)>,
         U: UsbController,
         V: UsartController<KeySwitchId = (u8, u8)>,
-    > Keyboard<K, U, V>
+        O: OledModule,
+    > Keyboard<K, U, V, O>
 {
     const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
     const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
-    pub fn new(key_switches: K, usb_controller: U, usart_controller: V) -> Self {
+    pub fn new(key_switches: K, usb_controller: U, usart_controller: V, oled_module: O) -> Self {
         Keyboard {
             key_switches,
             usb_controller,
             usart_controller,
+            oled_module,
         }
     }
 
     pub fn main_loop(&mut self, delay: &mut impl DelayMs<u16>) -> ! {
+        let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("./rust.raw"), 64);
+        let im = Image::new(&raw, Point::new(0, 0));
+        self.oled_module.draw_image(im);
         loop {
             let left = self.key_switches.scan();
             self.usart_controller.put(&left);
