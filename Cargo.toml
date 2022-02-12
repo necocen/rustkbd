@@ -11,3 +11,4 @@ lto = true
 panic = "abort"
 strip = "symbols"  # Automatically strip symbols from the binary.
 lto = true
+opt-level = "s"
