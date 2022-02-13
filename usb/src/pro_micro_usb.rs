@@ -19,7 +19,6 @@ use self::{
 };
 
 mod descriptors;
-
 mod request_type;
 mod setup_packet;
 

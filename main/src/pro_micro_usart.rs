@@ -40,7 +40,7 @@ impl UsartController for ProMicroUsart {
             let mut vec = Vec::<Self::KeySwitchId, 6>::new();
             if let Some(len) = queue.peek() {
                 let len = (len & 0x7f) as usize;
-                if queue.len() >= len * 2 + 1 {
+                if queue.len() > len * 2 {
                     queue.dequeue(); // len
                     for _ in 0..len {
                         let col = queue.dequeue().unwrap();
@@ -67,7 +67,7 @@ impl UsartController for ProMicroUsart {
                 usart1.udr1.write(|w| w.bits(len));
             }
             let iter = keys
-                .into_iter()
+                .iter()
                 .flat_map(|(col, row)| once(col).chain(once(row)));
             for byte in iter {
                 while usart1.ucsr1a.read().udre1().bit_is_clear() {}
