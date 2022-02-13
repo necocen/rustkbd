@@ -37,7 +37,6 @@ impl<
     pub fn main_loop(&mut self, delay: &mut impl DelayMs<u16>) -> ! {
         let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("./rust.raw"), 64);
         let im = Image::new(&raw, Point::new(0, 0));
-        //self.oled_module.draw_image(im);
         im.draw(&mut self.draw_target).ok();
         loop {
             let left = self.key_switches.scan();
