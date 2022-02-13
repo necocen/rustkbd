@@ -283,6 +283,7 @@ version = "0.0.0"
 dependencies = [
  "atmega-hal",
  "avr-device",
+ "embedded-graphics",
  "heapless",
  "keyboard-core",
  "panic-halt",
