@@ -6,15 +6,15 @@ extern crate panic_halt;
 use atmega_hal::{clock::MHz16, delay::Delay, pins, Peripherals};
 use avr_device::interrupt;
 use keyboard_core::keyboard::Keyboard;
+use oled::init_display;
 use pro_micro_usart::ProMicroUsart;
-use ssd_1306::Ssd1306;
 use usb::pro_micro_usb::ProMicroUsb;
 
 use crate::key_matrix::KeyMatrix;
 
 mod key_matrix;
+mod oled;
 mod pro_micro_usart;
-mod ssd_1306;
 
 #[atmega_hal::entry]
 fn main() -> ! {
@@ -28,7 +28,7 @@ fn main() -> ! {
     let b5 = pins.pb5.into_output_high().downgrade();
     let mut delay = Delay::<MHz16>::new();
     let key_matrix = KeyMatrix::new([b2, b6], [b4, b5]);
-    let oled_module = Ssd1306::new(
+    let oled_module = init_display(
         dp.TWI,
         pins.pd1.into_pull_up_input(),
         pins.pd0.into_pull_up_input(),
