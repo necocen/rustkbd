@@ -7,5 +7,7 @@ pub trait OledModule {
 
     fn clear(&mut self);
 
-    fn draw_image(&mut self, image: impl Drawable<Color = BinaryColor>);
+    fn draw(&mut self, drawable: impl Drawable<Color = BinaryColor>);
+
+    fn flush(&mut self);
 }
