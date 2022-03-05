@@ -2,7 +2,7 @@
 name = "main"
 version = "0.0.0"
 authors = ["necocen <necocen@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [[bin]]
 name = "rustkbd"
@@ -12,10 +12,17 @@ path = "src/main.rs"
 
 [dependencies]
 panic-halt = "0.2.0"
-atmega-hal = { git = "https://github.com/Rahix/avr-hal", branch = "main", features = ["atmega32u4", "rt"] }
-avr-device = "0.3.2"
-usb = { path = "../usb" }
 keyboard-core = { path = "../keyboard-core" }
 ssd1306 = "0.7.0"
 embedded-graphics = "0.7.1"
 heapless = "0.7.10"
+rp-pico = "0.2.0"
+cortex-m = "0.7.4"
+embedded-hal = "0.2.7"
+embedded-time = "0.12.1"
+cortex-m-rt = "0.7.1"
+defmt = "0.3.0"
+defmt-rtt = "0.3.0"
+usbd-hid = "0.5.2"
+usb-device = "0.2.8"
+usbd-hid-macros = "0.5.2"

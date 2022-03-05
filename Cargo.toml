@@ -1,14 +1,12 @@
 cargo-features = ["strip"]
 
 [workspace]
-members = ["main", "usb", "keyboard-core"]
+members = ["main", "keyboard-core"]
 
 [profile.dev]
 panic = "abort"
-lto = true
 
 [profile.release]
 panic = "abort"
 strip = "symbols"  # Automatically strip symbols from the binary.
 lto = true
-opt-level = "s"

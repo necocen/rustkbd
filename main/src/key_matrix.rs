@@ -1,21 +1,18 @@
 use core::cell::RefCell;
 
-use atmega_hal::port::{
-    mode::{Input, Output, PullUp},
-    Dynamic, Pin,
-};
 use heapless::Vec;
 use keyboard_core::key_switches::KeySwitches;
+use rp_pico::hal::gpio::{Input, Output, PullUp, PushPull, Readable, SpecificPin};
 
 pub struct KeyMatrix<const COLS: usize, const ROWS: usize> {
-    inputs: [Pin<Input<PullUp>, Dynamic>; ROWS],
-    outputs: RefCell<[Pin<Output, Dynamic>; COLS]>,
+    inputs: [SpecificPin<Input<PullUp>>; ROWS],
+    outputs: RefCell<[SpecificPin<Output<PushPull>>; COLS]>,
 }
 
 impl<const COLS: usize, const ROWS: usize> KeyMatrix<COLS, ROWS> {
     pub fn new(
-        inputs: [Pin<Input<PullUp>, Dynamic>; ROWS],
-        outputs: [Pin<Output, Dynamic>; COLS],
+        inputs: [SpecificPin<Input<PullUp>>; ROWS],
+        outputs: [SpecificPin<Output<Readable>>; COLS],
     ) -> Self {
         KeyMatrix {
             inputs,
