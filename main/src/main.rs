@@ -5,7 +5,7 @@ extern crate panic_halt;
 use cortex_m::delay;
 use cortex_m_rt::entry;
 use key_matrix::KeyMatrix;
-use keyboard_core::{key_switches::KeySwitches, keyboard::Keyboard};
+use keyboard_core::keyboard::Keyboard;
 use rp_pico::{
     hal::{self, prelude::*},
     pac::{self, interrupt},
@@ -110,20 +110,19 @@ fn main() -> ! {
         [pins.gpio16.into(), pins.gpio17.into()],
         [pins.gpio14.into(), pins.gpio15.into()],
     );
+    let keyboard = Keyboard::new(key_matrix);
 
     unsafe {
         // Enable the USB interrupt
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
     };
-
     let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
-
     loop {
-        let scan = key_matrix.scan(&mut delay);
+        let key_codes = keyboard.main_loop(&mut delay);
         let report = KeyboardReport {
             modifier: 0,
             reserved: 0,
-            key_codes: key_codes(&scan),
+            key_codes,
         };
         cortex_m::interrupt::free(|_| unsafe {
             USB_HID.as_mut().map(|hid| hid.push_input(&report));
@@ -138,13 +137,4 @@ unsafe fn USBCTRL_IRQ() {
     let usb_dev = USB_DEVICE.as_mut().unwrap();
     let usb_hid = USB_HID.as_mut().unwrap();
     usb_dev.poll(&mut [usb_hid]);
-}
-fn key_codes(left: &[(u8, u8)]) -> [u8; 6] {
-    const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
-    //const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
-    let mut keys = [0u8; 6];
-    for (i, (col, row)) in left.iter().enumerate() {
-        keys[i] = KEY_CODES_LEFT[*col as usize][*row as usize];
-    }
-    keys
 }
