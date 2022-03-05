@@ -4,15 +4,14 @@ extern crate panic_halt;
 
 use cortex_m::delay;
 use cortex_m_rt::entry;
-use keyboard_core::keyboard::Keyboard;
+use key_matrix::KeyMatrix;
+use keyboard_core::{key_switches::KeySwitches, keyboard::Keyboard};
 use rp_pico::{
     hal::{self, prelude::*},
     pac::{self, interrupt},
 };
 // Time handling traits
 use embedded_time::rate::*;
-// GPIO traits
-use embedded_hal::digital::v2::OutputPin;
 use usb_device::{
     class_prelude::UsbBusAllocator,
     device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
@@ -20,7 +19,7 @@ use usb_device::{
 use usbd_hid::{descriptor::generator_prelude::*, hid_class::HIDClass};
 use usbd_hid_macros::gen_hid_descriptor;
 
-//mod key_matrix;
+mod key_matrix;
 
 /// The USB Bus Driver (shared with the interrupt).
 static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
@@ -56,10 +55,16 @@ struct KeyboardReport {
 fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
+    // The single-cycle I/O block controls our GPIO pins
+    let sio = hal::Sio::new(pac.SIO);
+    let pins = rp_pico::Pins::new(
+        pac.IO_BANK0,
+        pac.PADS_BANK0,
+        sio.gpio_bank0,
+        &mut pac.RESETS,
+    );
     // Set up the watchdog driver - needed by the clock setup code
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
-    // Configure the clocks
-    //
     // The default is to generate a 125 MHz system clock
     let clocks = hal::clocks::init_clocks_and_plls(
         rp_pico::XOSC_CRYSTAL_FREQ,
@@ -101,6 +106,11 @@ fn main() -> ! {
         USB_DEVICE = Some(usb_device);
     }
 
+    let key_matrix = KeyMatrix::new(
+        [pins.gpio16.into(), pins.gpio17.into()],
+        [pins.gpio14.into(), pins.gpio15.into()],
+    );
+
     unsafe {
         // Enable the USB interrupt
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
@@ -108,26 +118,16 @@ fn main() -> ! {
 
     let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
 
-    // The single-cycle I/O block controls our GPIO pins
-    //let sio = hal::Sio::new(pac.SIO);
-
-    // let pins = rp_pico::Pins::new(
-    //     pac.IO_BANK0,
-    //     pac.PADS_BANK0,
-    //     sio.gpio_bank0,
-    //     &mut pac.RESETS,
-    // );
-
     loop {
+        let scan = key_matrix.scan(&mut delay);
+        let report = KeyboardReport {
+            modifier: 0,
+            reserved: 0,
+            key_codes: key_codes(&scan),
+        };
         cortex_m::interrupt::free(|_| unsafe {
-            let report = KeyboardReport {
-                modifier: 0,
-                reserved: 0,
-                key_codes: [0x1e, 0, 0, 0, 0, 0],
-            };
             USB_HID.as_mut().map(|hid| hid.push_input(&report));
         });
-        delay.delay_ms(10);
     }
 }
 
@@ -138,4 +138,13 @@ unsafe fn USBCTRL_IRQ() {
     let usb_dev = USB_DEVICE.as_mut().unwrap();
     let usb_hid = USB_HID.as_mut().unwrap();
     usb_dev.poll(&mut [usb_hid]);
+}
+fn key_codes(left: &[(u8, u8)]) -> [u8; 6] {
+    const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
+    //const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
+    let mut keys = [0u8; 6];
+    for (i, (col, row)) in left.iter().enumerate() {
+        keys[i] = KEY_CODES_LEFT[*col as usize][*row as usize];
+    }
+    keys
 }

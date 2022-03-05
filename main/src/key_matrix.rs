@@ -1,19 +1,27 @@
 use core::cell::RefCell;
 
+use embedded_hal::{
+    blocking::delay::DelayUs,
+    digital::v2::{InputPin, OutputPin},
+};
 use heapless::Vec;
 use keyboard_core::key_switches::KeySwitches;
-use rp_pico::hal::gpio::{Input, Output, PullUp, PushPull, Readable, SpecificPin};
+use rp_pico::hal::gpio::DynPin;
 
 pub struct KeyMatrix<const COLS: usize, const ROWS: usize> {
-    inputs: [SpecificPin<Input<PullUp>>; ROWS],
-    outputs: RefCell<[SpecificPin<Output<PushPull>>; COLS]>,
+    inputs: [DynPin; ROWS],
+    outputs: RefCell<[DynPin; COLS]>,
 }
 
 impl<const COLS: usize, const ROWS: usize> KeyMatrix<COLS, ROWS> {
-    pub fn new(
-        inputs: [SpecificPin<Input<PullUp>>; ROWS],
-        outputs: [SpecificPin<Output<Readable>>; COLS],
-    ) -> Self {
+    pub fn new(mut inputs: [DynPin; ROWS], mut outputs: [DynPin; COLS]) -> Self {
+        for pin in inputs.iter_mut() {
+            pin.into_pull_up_input();
+        }
+        for pin in outputs.iter_mut() {
+            pin.into_push_pull_output();
+            pin.set_high().ok();
+        }
         KeyMatrix {
             inputs,
             outputs: RefCell::new(outputs),
@@ -24,18 +32,19 @@ impl<const COLS: usize, const ROWS: usize> KeyMatrix<COLS, ROWS> {
 impl<const COLS: usize, const ROWS: usize> KeySwitches for KeyMatrix<COLS, ROWS> {
     type Identifier = (u8, u8);
 
-    fn scan(&self) -> Vec<Self::Identifier, 6> {
+    fn scan(&self, delay: &mut impl DelayUs<u16>) -> Vec<Self::Identifier, 6> {
         let mut keys = Vec::<Self::Identifier, 6>::new();
         let mut outputs = self.outputs.borrow_mut();
 
         for i in 0..COLS {
-            outputs[i].set_low();
+            outputs[i].set_low().ok();
+            delay.delay_us(20);
             for j in 0..ROWS {
-                if self.inputs[j].is_low() {
+                if self.inputs[j].is_low().unwrap() {
                     keys.push((i as u8, j as u8)).ok();
                 }
             }
-            outputs[i].set_high();
+            outputs[i].set_high().ok();
         }
         keys
     }

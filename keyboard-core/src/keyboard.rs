@@ -38,23 +38,24 @@ impl<
 
     pub fn main_loop(&mut self, delay: &mut impl DelayMs<u16>) -> ! {
         // let im = Image::new(&Self::RUST_LOGO, Point::new(0, 0));
-        loop {
-            let left = self.key_switches.scan();
-            self.usart_controller.put(&left);
-            let right = self.usart_controller.get();
-            let keys = self.key_codes(&left, right.as_deref());
-            // FIXME: USBConはそっちでIDLEにあわせて送信する必要があるので、それも含めて検討が必要であろう
-            self.usb_controller.send(keys);
-            self.oled_module.set_cursor(0, 0);
-            self.oled_module.clear();
-            //self.oled_module.draw(im);
-            for key in &keys[2..8] {
-                let c = (key - 0x1e + '1' as u8) as char;
-                self.oled_module.draw_char(c);
-            }
-            self.oled_module.flush();
-            delay.delay_ms(24u16);
-        }
+        // loop {
+        //     let left = self.key_switches.scan();
+        //     self.usart_controller.put(&left);
+        //     let right = self.usart_controller.get();
+        //     let keys = self.key_codes(&left, right.as_deref());
+        //     // FIXME: USBConはそっちでIDLEにあわせて送信する必要があるので、それも含めて検討が必要であろう
+        //     self.usb_controller.send(keys);
+        //     self.oled_module.set_cursor(0, 0);
+        //     self.oled_module.clear();
+        //     //self.oled_module.draw(im);
+        //     for key in &keys[2..8] {
+        //         let c = (key - 0x1e + '1' as u8) as char;
+        //         self.oled_module.draw_char(c);
+        //     }
+        //     self.oled_module.flush();
+        //     delay.delay_ms(24u16);
+        // }
+        loop {}
     }
 
     fn key_codes(&self, left: &[(u8, u8)], right: Option<&[(u8, u8)]>) -> [u8; 8] {
