@@ -3,7 +3,6 @@ use embedded_graphics::{
     pixelcolor::BinaryColor,
     prelude::Point,
 };
-use embedded_hal::blocking::delay::DelayUs;
 use heapless::Vec;
 
 use crate::key_switches::KeySwitches;
@@ -21,9 +20,9 @@ impl<K: KeySwitches<Identifier = (u8, u8)>> Keyboard<K> {
         Keyboard { key_switches }
     }
 
-    pub fn main_loop(&self, delay: &mut impl DelayUs<u16>) -> [u8; 6] {
+    pub fn main_loop(&self) -> [u8; 6] {
         //let im = Image::new(&Self::RUST_LOGO, Point::new(0, 0));
-        let left = self.key_switches.scan(delay);
+        let left = self.key_switches.scan();
         //self.usart_controller.put(&left);
         //let right = self.usart_controller.get();
         self.key_codes(left, None)

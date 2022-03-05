@@ -8,13 +8,14 @@ use heapless::Vec;
 use keyboard_core::key_switches::KeySwitches;
 use rp_pico::hal::gpio::DynPin;
 
-pub struct KeyMatrix<const COLS: usize, const ROWS: usize> {
+pub struct KeyMatrix<'a, D: DelayUs<u16>, const COLS: usize, const ROWS: usize> {
     inputs: [DynPin; ROWS],
     outputs: RefCell<[DynPin; COLS]>,
+    delay: RefCell<&'a mut D>,
 }
 
-impl<const COLS: usize, const ROWS: usize> KeyMatrix<COLS, ROWS> {
-    pub fn new(mut inputs: [DynPin; ROWS], mut outputs: [DynPin; COLS]) -> Self {
+impl<'a, D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeyMatrix<'a, D, COLS, ROWS> {
+    pub fn new(mut inputs: [DynPin; ROWS], mut outputs: [DynPin; COLS], delay: &'a mut D) -> Self {
         for pin in inputs.iter_mut() {
             pin.into_pull_up_input();
         }
@@ -25,20 +26,22 @@ impl<const COLS: usize, const ROWS: usize> KeyMatrix<COLS, ROWS> {
         KeyMatrix {
             inputs,
             outputs: RefCell::new(outputs),
+            delay: RefCell::new(delay),
         }
     }
 }
 
-impl<const COLS: usize, const ROWS: usize> KeySwitches for KeyMatrix<COLS, ROWS> {
+impl<'a, D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches
+    for KeyMatrix<'a, D, COLS, ROWS>
+{
     type Identifier = (u8, u8);
 
-    fn scan(&self, delay: &mut impl DelayUs<u16>) -> Vec<Self::Identifier, 6> {
+    fn scan(&self) -> Vec<Self::Identifier, 6> {
         let mut keys = Vec::<Self::Identifier, 6>::new();
         let mut outputs = self.outputs.borrow_mut();
-
         for i in 0..COLS {
             outputs[i].set_low().ok();
-            delay.delay_us(20);
+            self.delay.borrow_mut().delay_us(20);
             for j in 0..ROWS {
                 if self.inputs[j].is_low().unwrap() {
                     keys.push((i as u8, j as u8)).ok();

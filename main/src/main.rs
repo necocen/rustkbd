@@ -77,6 +77,7 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
+    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -109,6 +110,7 @@ fn main() -> ! {
     let key_matrix = KeyMatrix::new(
         [pins.gpio16.into(), pins.gpio17.into()],
         [pins.gpio14.into(), pins.gpio15.into()],
+        &mut delay,
     );
     let keyboard = Keyboard::new(key_matrix);
 
@@ -116,9 +118,9 @@ fn main() -> ! {
         // Enable the USB interrupt
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
     };
-    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+
     loop {
-        let key_codes = keyboard.main_loop(&mut delay);
+        let key_codes = keyboard.main_loop();
         let report = KeyboardReport {
             modifier: 0,
             reserved: 0,
