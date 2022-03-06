@@ -74,7 +74,7 @@ impl<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryCol
         }
 
         if D::REQUIRES_FLUSH {
-            display.flush().ok();
+            display.flush().ok(); // かなりここ律速
         }
         keys
     }

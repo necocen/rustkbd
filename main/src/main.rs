@@ -2,18 +2,31 @@
 #![no_main]
 extern crate panic_halt;
 
-use cortex_m::delay;
+use core::cell::RefCell;
+
+use cortex_m::{
+    delay::{self, Delay},
+    interrupt::Mutex,
+};
 use cortex_m_rt::entry;
 use embedded_time::rate::*;
 use key_matrix::KeyMatrix;
 use keyboard_core::keyboard::Keyboard;
 use rp_pico::{
-    hal::{self, prelude::*, I2C},
-    pac::{self, interrupt},
+    hal::{
+        self,
+        gpio::{
+            bank0::{Gpio6, Gpio7},
+            Function, Pin, I2C as GpioI2C,
+        },
+        prelude::*,
+        I2C,
+    },
+    pac::{self, interrupt, I2C1},
 };
 use ssd1306::{
-    mode::DisplayConfig, rotation::DisplayRotation, size::DisplaySize128x32, I2CDisplayInterface,
-    Ssd1306,
+    mode::DisplayConfig, prelude::I2CInterface, rotation::DisplayRotation, size::DisplaySize128x32,
+    I2CDisplayInterface, Ssd1306,
 };
 use ssd1306_display::Ssd1306Display;
 use usb_device::{
@@ -32,6 +45,15 @@ static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
 static mut USB_HID: Option<HIDClass<hal::usb::UsbBus>> = None;
 /// The USB Device Driver (shared with the interrupt).
 static mut USB_DEVICE: Option<UsbDevice<hal::usb::UsbBus>> = None;
+
+type KeyboardType = Keyboard<
+    KeyMatrix<Delay, 2, 2>,
+    Ssd1306Display<
+        I2CInterface<I2C<I2C1, (Pin<Gpio6, Function<GpioI2C>>, Pin<Gpio7, Function<GpioI2C>>)>>,
+        DisplaySize128x32,
+    >,
+>;
+static KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
 
 /**
  * cf. https://hikalium.hatenablog.jp/entry/2021/12/31/150738
@@ -139,25 +161,25 @@ fn main() -> ! {
     let key_matrix = KeyMatrix::new(
         [pins.gpio16.into(), pins.gpio17.into()],
         [pins.gpio14.into(), pins.gpio15.into()],
-        &mut delay,
+        delay,
     );
     let keyboard = Keyboard::new(key_matrix, display, is_recv);
+    cortex_m::interrupt::free(|cs| {
+        KEYBOARD.borrow(cs).replace(Some(keyboard));
+    });
 
     loop {
-        {
-            let key_codes = keyboard.main_loop();
+        cortex_m::interrupt::free(|cs| unsafe {
+            let key_codes = KEYBOARD.borrow(cs).borrow().as_ref().unwrap().main_loop();
             if !is_recv {
                 let report = KeyboardReport {
                     modifier: 0,
                     reserved: 0,
                     key_codes,
                 };
-                cortex_m::interrupt::free(|_| unsafe {
-                    USB_HID.as_mut().map(|hid| hid.push_input(&report));
-                });
+                USB_HID.as_mut().map(|hid| hid.push_input(&report));
             }
-        }
-        //       display.flush().ok();
+        });
     }
 }
 
