@@ -1,12 +1,13 @@
 use core::cell::RefCell;
 
 use embedded_graphics::{
-    image::{Image, ImageRaw},
+    mono_font::{ascii::FONT_6X10, MonoTextStyle},
     pixelcolor::BinaryColor,
     prelude::Point,
+    text::Text,
     Drawable,
 };
-use heapless::Vec;
+use heapless::{String, Vec};
 
 use crate::{display::KeyboardDisplay, key_switches::KeySwitches};
 
@@ -14,6 +15,7 @@ pub struct Keyboard<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Co
 {
     key_switches: K,
     display: RefCell<D>,
+    char_style: MonoTextStyle<'static, BinaryColor>,
 }
 
 impl<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryColor>>
@@ -21,37 +23,38 @@ impl<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryCol
 {
     const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
     const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
-    const RUST_LOGO: ImageRaw<'static, BinaryColor> =
-        ImageRaw::new_binary(include_bytes!("./rust.raw"), 64);
+
     pub fn new(key_switches: K, display: D) -> Self {
         Keyboard {
             key_switches,
             display: RefCell::new(display),
+            char_style: MonoTextStyle::new(&FONT_6X10, BinaryColor::On),
         }
     }
 
     pub fn main_loop(&self) -> [u8; 6] {
-        let im = Image::new(&Self::RUST_LOGO, Point::new(0, 0));
+        //let im = Image::new(&Self::RUST_LOGO, Point::new(0, 0));
         let left = self.key_switches.scan();
         //self.usart_controller.put(&left);
         //let right = self.usart_controller.get();
         let mut display = self.display.borrow_mut();
         display.clear(BinaryColor::Off).ok();
-        im.draw(&mut *display).ok();
+        //im.draw(&mut *display).ok();
+        let keys = self.key_codes(left, None);
+        let mut string = String::<6>::new();
+        for key in keys.iter() {
+            if *key != 0 {
+                string.push((key - 0x1e + b'1') as char).ok();
+            }
+        }
+        Text::new(string.as_str(), Point::new(0, 10), self.char_style)
+            .draw(&mut *display)
+            .ok();
 
-        // self.oled_module.set_cursor(0, 0);
-        // self.oled_module.clear();
-        //self.oled_module.draw(im);
-
-        // for key in &keys[2..8] {
-        //     let c = (key - 0x1e + '1' as u8) as char;
-        //     self.oled_module.draw_char(c);
-        // }
-        // self.oled_module.flush();
         if D::REQUIRES_FLUSH {
             display.flush().ok();
         }
-        self.key_codes(left, None)
+        keys
     }
 
     fn key_codes(&self, left: Vec<(u8, u8), 6>, right: Option<Vec<(u8, u8), 6>>) -> [u8; 6] {
