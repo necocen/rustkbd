@@ -340,6 +340,7 @@ dependencies = [
  "cortex-m-rt",
  "defmt",
  "defmt-rtt",
+ "display-interface",
  "embedded-graphics",
  "embedded-hal",
  "embedded-time",

@@ -4,14 +4,18 @@ extern crate panic_halt;
 
 use cortex_m::delay;
 use cortex_m_rt::entry;
+use embedded_time::rate::*;
 use key_matrix::KeyMatrix;
 use keyboard_core::keyboard::Keyboard;
 use rp_pico::{
-    hal::{self, prelude::*},
+    hal::{self, prelude::*, I2C},
     pac::{self, interrupt},
 };
-// Time handling traits
-use embedded_time::rate::*;
+use ssd1306::{
+    mode::DisplayConfig, rotation::DisplayRotation, size::DisplaySize128x32, I2CDisplayInterface,
+    Ssd1306,
+};
+use ssd1306_display::Ssd1306Display;
 use usb_device::{
     class_prelude::UsbBusAllocator,
     device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
@@ -20,6 +24,7 @@ use usbd_hid::{descriptor::generator_prelude::*, hid_class::HIDClass};
 use usbd_hid_macros::gen_hid_descriptor;
 
 mod key_matrix;
+mod ssd1306_display;
 
 /// The USB Bus Driver (shared with the interrupt).
 static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
@@ -107,12 +112,26 @@ fn main() -> ! {
         USB_DEVICE = Some(usb_device);
     }
 
+    let i2c = I2C::i2c1(
+        pac.I2C1,
+        pins.gpio6.into_mode(),
+        pins.gpio7.into_mode(),
+        400.kHz(),
+        &mut pac.RESETS,
+        clocks.system_clock,
+    );
+    let interface = I2CDisplayInterface::new(i2c);
+    let mut ssd1306 = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
+        .into_buffered_graphics_mode();
+    ssd1306.init().ok();
+    let display = Ssd1306Display(ssd1306);
+
     let key_matrix = KeyMatrix::new(
         [pins.gpio16.into(), pins.gpio17.into()],
         [pins.gpio14.into(), pins.gpio15.into()],
         &mut delay,
     );
-    let keyboard = Keyboard::new(key_matrix);
+    let keyboard = Keyboard::new(key_matrix, display);
 
     unsafe {
         // Enable the USB interrupt
@@ -120,15 +139,18 @@ fn main() -> ! {
     };
 
     loop {
-        let key_codes = keyboard.main_loop();
-        let report = KeyboardReport {
-            modifier: 0,
-            reserved: 0,
-            key_codes,
-        };
-        cortex_m::interrupt::free(|_| unsafe {
-            USB_HID.as_mut().map(|hid| hid.push_input(&report));
-        });
+        {
+            let key_codes = keyboard.main_loop();
+            let report = KeyboardReport {
+                modifier: 0,
+                reserved: 0,
+                key_codes,
+            };
+            cortex_m::interrupt::free(|_| unsafe {
+                USB_HID.as_mut().map(|hid| hid.push_input(&report));
+            });
+        }
+        //       display.flush().ok();
     }
 }
 
