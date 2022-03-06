@@ -18,7 +18,7 @@ use ssd1306::{
 use ssd1306_display::Ssd1306Display;
 use usb_device::{
     class_prelude::UsbBusAllocator,
-    device::{UsbDevice, UsbDeviceBuilder, UsbVidPid},
+    device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
 };
 use usbd_hid::{descriptor::generator_prelude::*, hid_class::HIDClass};
 use usbd_hid_macros::gen_hid_descriptor;
@@ -111,6 +111,10 @@ fn main() -> ! {
     unsafe {
         USB_DEVICE = Some(usb_device);
     }
+    unsafe {
+        // Enable the USB interrupt
+        pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
+    };
 
     let i2c = I2C::i2c1(
         pac.I2C1,
@@ -126,29 +130,32 @@ fn main() -> ! {
     ssd1306.init().ok();
     let display = Ssd1306Display(ssd1306);
 
+    // controller-receiver detection
+    delay.delay_ms(500);
+    let is_recv = cortex_m::interrupt::free(|_| unsafe {
+        USB_DEVICE.as_ref().unwrap().state() == UsbDeviceState::Default
+    });
+
     let key_matrix = KeyMatrix::new(
         [pins.gpio16.into(), pins.gpio17.into()],
         [pins.gpio14.into(), pins.gpio15.into()],
         &mut delay,
     );
-    let keyboard = Keyboard::new(key_matrix, display);
-
-    unsafe {
-        // Enable the USB interrupt
-        pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
-    };
+    let keyboard = Keyboard::new(key_matrix, display, is_recv);
 
     loop {
         {
             let key_codes = keyboard.main_loop();
-            let report = KeyboardReport {
-                modifier: 0,
-                reserved: 0,
-                key_codes,
-            };
-            cortex_m::interrupt::free(|_| unsafe {
-                USB_HID.as_mut().map(|hid| hid.push_input(&report));
-            });
+            if !is_recv {
+                let report = KeyboardReport {
+                    modifier: 0,
+                    reserved: 0,
+                    key_codes,
+                };
+                cortex_m::interrupt::free(|_| unsafe {
+                    USB_HID.as_mut().map(|hid| hid.push_input(&report));
+                });
+            }
         }
         //       display.flush().ok();
     }
