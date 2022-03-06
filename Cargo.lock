@@ -315,6 +315,9 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal",
  "heapless",
+ "usb-device",
+ "usbd-hid",
+ "usbd-hid-macros",
 ]
 
 [[package]]
@@ -350,8 +353,6 @@ dependencies = [
  "rp-pico",
  "ssd1306",
  "usb-device",
- "usbd-hid",
- "usbd-hid-macros",
 ]
 
 [[package]]

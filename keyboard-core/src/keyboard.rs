@@ -8,31 +8,59 @@ use embedded_graphics::{
     Drawable,
 };
 use heapless::{String, Vec};
+use usb_device::{
+    class_prelude::{UsbBus, UsbBusAllocator},
+    device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
+};
+use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
 
-use crate::{display::KeyboardDisplay, key_switches::KeySwitches};
+use crate::{display::KeyboardDisplay, key_switches::KeySwitches, keyboard_report::KeyboardReport};
 
-pub struct Keyboard<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryColor>>
-{
+pub struct Keyboard<
+    'b,
+    B: UsbBus,
+    K: KeySwitches<Identifier = (u8, u8)>,
+    D: KeyboardDisplay<Color = BinaryColor>,
+> {
+    usb_device: RefCell<UsbDevice<'b, B>>,
+    usb_hid: RefCell<HIDClass<'b, B>>,
     key_switches: K,
     display: RefCell<D>,
     is_recv: bool,
 }
 
-impl<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryColor>>
-    Keyboard<K, D>
+impl<
+        'b,
+        B: UsbBus,
+        K: KeySwitches<Identifier = (u8, u8)>,
+        D: KeyboardDisplay<Color = BinaryColor>,
+    > Keyboard<'b, B, K, D>
 {
     const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
     const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
 
-    pub fn new(key_switches: K, display: D, is_recv: bool) -> Self {
+    pub fn new(usb_bus_alloc: &'b UsbBusAllocator<B>, key_switches: K, display: D) -> Self {
+        let usb_hid = HIDClass::new(usb_bus_alloc, KeyboardReport::desc(), 10);
+        let usb_device = UsbDeviceBuilder::new(usb_bus_alloc, UsbVidPid(0xfeed, 0x802f))
+            .manufacturer("necocen")
+            .product("necoboard")
+            .serial_number("17")
+            .device_class(0)
+            .build();
+
+        // TODO: ここでdelayしたい
+        //let is_recv = usb_device.state() == UsbDeviceState::Default;
+        let is_recv = false;
         Keyboard {
+            usb_hid: RefCell::new(usb_hid),
+            usb_device: RefCell::new(usb_device),
             key_switches,
             display: RefCell::new(display),
             is_recv,
         }
     }
 
-    pub fn main_loop(&self) -> [u8; 6] {
+    pub fn main_loop(&self) {
         //let im = Image::new(&Self::RUST_LOGO, Point::new(0, 0));
         //self.usart_controller.put(&left);
         //let right = self.usart_controller.get();
@@ -40,11 +68,20 @@ impl<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryCol
 
         // scan key matrix
         let scan = self.key_switches.scan();
-        let keys = if self.is_recv {
+        let key_codes = if self.is_recv {
             self.key_codes(Vec::new(), scan)
         } else {
             self.key_codes(scan, Vec::new())
         };
+
+        if !self.is_recv {
+            let report = KeyboardReport {
+                modifier: 0,
+                reserved: 0,
+                key_codes,
+            };
+            self.usb_hid.borrow().push_input(&report).ok();
+        }
 
         // setup display
         let mut display = self.display.borrow_mut();
@@ -52,7 +89,7 @@ impl<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryCol
 
         // print pressed keys
         let mut string = String::<6>::new();
-        for key in keys.iter() {
+        for key in key_codes.iter() {
             if *key != 0 {
                 string.push((key - 0x1e + b'1') as char).ok();
             }
@@ -76,7 +113,12 @@ impl<K: KeySwitches<Identifier = (u8, u8)>, D: KeyboardDisplay<Color = BinaryCol
         if D::REQUIRES_FLUSH {
             display.flush().ok(); // かなりここ律速
         }
-        keys
+    }
+
+    pub fn usb_poll(&self) {
+        self.usb_device
+            .borrow_mut()
+            .poll(&mut [&mut *self.usb_hid.borrow_mut()]);
     }
 
     fn key_codes(&self, left: Vec<(u8, u8), 6>, right: Vec<(u8, u8), 6>) -> [u8; 6] {
