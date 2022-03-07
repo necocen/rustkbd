@@ -9,6 +9,7 @@ use cortex_m::{
     interrupt::Mutex,
 };
 use cortex_m_rt::entry;
+use embedded_hal::digital::v2::InputPin;
 use embedded_time::rate::*;
 use key_matrix::KeyMatrix;
 use keyboard_core::keyboard::Keyboard;
@@ -75,7 +76,7 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -106,15 +107,19 @@ fn main() -> ! {
         .into_buffered_graphics_mode();
     ssd1306.init().ok();
     let display = Ssd1306Display(ssd1306);
-    // controller-receiver detection
-    delay.delay_ms(500);
 
     let key_matrix = KeyMatrix::new(
         [pins.gpio16.into(), pins.gpio17.into()],
         [pins.gpio14.into(), pins.gpio15.into()],
         delay,
     );
-    let keyboard = Keyboard::new(unsafe { USB_BUS.as_ref().unwrap() }, key_matrix, display);
+    let is_left_hand = pins.gpio22.into_pull_up_input().is_low().unwrap();
+    let keyboard = Keyboard::new(
+        unsafe { USB_BUS.as_ref().unwrap() },
+        key_matrix,
+        display,
+        is_left_hand,
+    );
     cortex_m::interrupt::free(|cs| {
         KEYBOARD.borrow(cs).replace(Some(keyboard));
     });

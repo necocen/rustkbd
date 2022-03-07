@@ -26,7 +26,7 @@ pub struct Keyboard<
     usb_hid: RefCell<HIDClass<'b, B>>,
     key_switches: K,
     display: RefCell<D>,
-    is_recv: bool,
+    is_left_hand: bool,
 }
 
 impl<
@@ -39,7 +39,12 @@ impl<
     const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
     const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
 
-    pub fn new(usb_bus_alloc: &'b UsbBusAllocator<B>, key_switches: K, display: D) -> Self {
+    pub fn new(
+        usb_bus_alloc: &'b UsbBusAllocator<B>,
+        key_switches: K,
+        display: D,
+        is_left_hand: bool,
+    ) -> Self {
         let usb_hid = HIDClass::new(usb_bus_alloc, KeyboardReport::desc(), 10);
         let usb_device = UsbDeviceBuilder::new(usb_bus_alloc, UsbVidPid(0xfeed, 0x802f))
             .manufacturer("necocen")
@@ -47,16 +52,12 @@ impl<
             .serial_number("17")
             .device_class(0)
             .build();
-
-        // TODO: ここでdelayしたい
-        //let is_recv = usb_device.state() == UsbDeviceState::Default;
-        let is_recv = false;
         Keyboard {
             usb_hid: RefCell::new(usb_hid),
             usb_device: RefCell::new(usb_device),
             key_switches,
             display: RefCell::new(display),
-            is_recv,
+            is_left_hand,
         }
     }
 
@@ -66,15 +67,17 @@ impl<
         //let right = self.usart_controller.get();
         //im.draw(&mut *display).ok();
 
+        let is_recv = self.usb_device.borrow().state() != UsbDeviceState::Configured;
+
         // scan key matrix
         let scan = self.key_switches.scan();
-        let key_codes = if self.is_recv {
-            self.key_codes(Vec::new(), scan)
-        } else {
+        let key_codes = if self.is_left_hand {
             self.key_codes(scan, Vec::new())
+        } else {
+            self.key_codes(Vec::new(), scan)
         };
 
-        if !self.is_recv {
+        if !is_recv {
             let report = KeyboardReport {
                 modifier: 0,
                 reserved: 0,
@@ -100,7 +103,7 @@ impl<
             .ok();
 
         // display "Receiver" or "Controller"
-        if self.is_recv {
+        if is_recv {
             Text::new("Receiver", Point::new(0, 22), char_style)
                 .draw(&mut *display)
                 .ok();
