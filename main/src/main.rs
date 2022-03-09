@@ -9,7 +9,7 @@ use cortex_m::{
     interrupt::Mutex,
 };
 use cortex_m_rt::entry;
-use embedded_hal::digital::v2::InputPin;
+use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
 use key_matrix::KeyMatrix;
 use keyboard_core::keyboard::Keyboard;
@@ -17,18 +17,20 @@ use rp_pico::{
     hal::{
         self,
         gpio::{
-            bank0::{Gpio6, Gpio7},
-            Function, Pin, I2C as GpioI2C,
+            bank0::{Gpio4, Gpio5},
+            FunctionSpi, FunctionUart, Output, Pin, PushPull,
         },
         prelude::*,
+        spi::Enabled,
+        uart::{common_configs, UartPeripheral},
         usb::UsbBus,
-        I2C,
+        Spi,
     },
-    pac::{self, interrupt, I2C1},
+    pac::{self, interrupt, SPI0, UART0},
 };
 use ssd1306::{
-    mode::DisplayConfig, prelude::I2CInterface, rotation::DisplayRotation, size::DisplaySize128x32,
-    I2CDisplayInterface, Ssd1306,
+    mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
+    Ssd1306,
 };
 use ssd1306_display::Ssd1306Display;
 use usb_device::class_prelude::UsbBusAllocator;
@@ -44,8 +46,12 @@ type KeyboardType = Keyboard<
     UsbBus,
     KeyMatrix<Delay, 2, 2>,
     Ssd1306Display<
-        I2CInterface<I2C<I2C1, (Pin<Gpio6, Function<GpioI2C>>, Pin<Gpio7, Function<GpioI2C>>)>>,
-        DisplaySize128x32,
+        SPIInterface<
+            Spi<Enabled, SPI0, 8>,
+            Pin<Gpio4, Output<PushPull>>,
+            Pin<Gpio5, Output<PushPull>>,
+        >,
+        DisplaySize128x64,
     >,
 >;
 static KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
@@ -76,7 +82,7 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-    let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -94,16 +100,20 @@ fn main() -> ! {
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
     };
 
-    let i2c = I2C::i2c1(
-        pac.I2C1,
-        pins.gpio6.into_mode(),
-        pins.gpio7.into_mode(),
-        400.kHz(),
+    // なぜかここで待たないとディスプレイが点灯しない
+    delay.delay_ms(100);
+
+    let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
         &mut pac.RESETS,
         clocks.system_clock,
+        16_000_000u32.Hz(),
+        &MODE_0,
     );
-    let interface = I2CDisplayInterface::new(i2c);
-    let mut ssd1306 = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
+    let _ = pins.gpio6.into_mode::<FunctionSpi>();
+    let _ = pins.gpio7.into_mode::<FunctionSpi>();
+    let interface = SPIInterface::new(spi, pins.gpio4.into_mode(), pins.gpio5.into_mode());
+
+    let mut ssd1306 = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
         .into_buffered_graphics_mode();
     ssd1306.init().ok();
     let display = Ssd1306Display(ssd1306);
@@ -132,7 +142,7 @@ fn main() -> ! {
 
 #[allow(non_snake_case)]
 #[interrupt]
-unsafe fn USBCTRL_IRQ() {
+fn USBCTRL_IRQ() {
     cortex_m::interrupt::free(|cs| {
         KEYBOARD.borrow(cs).borrow().as_ref().unwrap().usb_poll();
     });
