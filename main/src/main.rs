@@ -17,8 +17,8 @@ use rp_pico::{
     hal::{
         self,
         gpio::{
-            bank0::{Gpio4, Gpio5},
-            FunctionSpi, FunctionUart, Output, Pin, PushPull,
+            bank0::{Gpio0, Gpio1, Gpio4, Gpio5},
+            Function, FunctionSpi, FunctionUart, Output, Pin, PushPull, Uart,
         },
         prelude::*,
         spi::Enabled,
@@ -33,10 +33,12 @@ use ssd1306::{
     Ssd1306,
 };
 use ssd1306_display::Ssd1306Display;
+use uart_connection::UartConnection;
 use usb_device::class_prelude::UsbBusAllocator;
 
 mod key_matrix;
 mod ssd1306_display;
+mod uart_connection;
 
 /// The USB Bus Driver (shared with the interrupt).
 static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
@@ -53,6 +55,7 @@ type KeyboardType = Keyboard<
         >,
         DisplaySize128x64,
     >,
+    UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
 >;
 static KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
 
@@ -100,12 +103,25 @@ fn main() -> ! {
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
     };
 
+    let uart_pins = (
+        pins.gpio0.into_mode::<FunctionUart>(),
+        pins.gpio1.into_mode::<FunctionUart>(),
+    );
+    let mut uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
+        .enable(common_configs::_19200_8_N_1, clocks.peripheral_clock.freq())
+        .unwrap();
+    unsafe {
+        pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
+    }
+    uart.enable_rx_interrupt();
+    let connection = UartConnection(uart);
+
     // なぜかここで待たないとディスプレイが点灯しない
     delay.delay_ms(100);
 
     let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
         &mut pac.RESETS,
-        clocks.system_clock,
+        clocks.peripheral_clock.freq(),
         16_000_000u32.Hz(),
         &MODE_0,
     );
@@ -128,6 +144,7 @@ fn main() -> ! {
         unsafe { USB_BUS.as_ref().unwrap() },
         key_matrix,
         display,
+        connection,
         is_left_hand,
     );
     cortex_m::interrupt::free(|cs| {
@@ -146,4 +163,13 @@ fn USBCTRL_IRQ() {
     cortex_m::interrupt::free(|cs| {
         KEYBOARD.borrow(cs).borrow().as_ref().unwrap().usb_poll();
     });
+}
+
+#[allow(non_snake_case)]
+#[interrupt]
+fn UART0_IRQ() {
+    cortex_m::interrupt::free(|cs| {
+        KEYBOARD.borrow(cs).borrow().as_ref().unwrap().split_poll();
+    });
+    cortex_m::asm::sev();
 }
