@@ -245,21 +245,10 @@ impl<
         *self.split_state.borrow_mut() = KeyboardState::WaitingForReceiver;
         // とりあえず0xffをアレとする
         self.split_connection.write(&[0xff]);
-        let mut buf = [0u8; 1];
-        let result = self.split_connection.read_with_timeout(
-            &mut buf,
-            &mut *self.timer.borrow_mut(),
-            Microseconds::<u64>::new(10_000),
-        );
-        if result {
-            if buf[0] == 0xfe {
-                *self.split_state.borrow_mut() = KeyboardState::Controller;
-            } else {
-                *self.split_state.borrow_mut() = KeyboardState::Undetermined;
-            }
-        } else {
-            *self.split_state.borrow_mut() = KeyboardState::Undetermined;
-        }
+        *self.split_state.borrow_mut() = match self.split_read_head_with_timeout() {
+            Some(0xfe) => KeyboardState::Controller,
+            _ => KeyboardState::Undetermined,
+        };
     }
 
     fn split_read_head_with_timeout(&self) -> Option<u8> {
