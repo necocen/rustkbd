@@ -12,7 +12,7 @@ use cortex_m_rt::entry;
 use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
 use key_matrix::KeyMatrix;
-use keyboard_core::keyboard::Keyboard;
+use keyboard_core::keyboard::{Keyboard, KeyboardHandedness};
 use rp_pico::{
     hal::{
         self,
@@ -22,9 +22,10 @@ use rp_pico::{
         },
         prelude::*,
         spi::Enabled,
+        timer::CountDown,
         uart::{common_configs, UartPeripheral},
         usb::UsbBus,
-        Spi,
+        Spi, Timer,
     },
     pac::{self, interrupt, SPI0, UART0},
 };
@@ -56,11 +57,13 @@ type KeyboardType = Keyboard<
         DisplaySize128x64,
     >,
     UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
+    CountDown<'static>,
 >;
-static KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
+static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
+    static mut TIMER: Option<Timer> = None;
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     // The single-cycle I/O block controls our GPIO pins
@@ -86,6 +89,7 @@ fn main() -> ! {
     .ok()
     .unwrap();
     let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -98,21 +102,14 @@ fn main() -> ! {
         // Note (safety): This is safe as interrupts haven't been started yet
         USB_BUS = Some(usb_bus);
     }
-    unsafe {
-        // Enable the USB interrupt
-        pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
-    };
 
     let uart_pins = (
         pins.gpio0.into_mode::<FunctionUart>(),
         pins.gpio1.into_mode::<FunctionUart>(),
     );
     let mut uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
-        .enable(common_configs::_19200_8_N_1, clocks.peripheral_clock.freq())
+        .enable(common_configs::_9600_8_N_1, clocks.peripheral_clock.freq())
         .unwrap();
-    unsafe {
-        pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
-    }
     uart.enable_rx_interrupt();
     let connection = UartConnection(uart);
 
@@ -139,19 +136,30 @@ fn main() -> ! {
         [pins.gpio14.into(), pins.gpio15.into()],
         delay,
     );
-    let is_left_hand = pins.gpio22.into_pull_up_input().is_low().unwrap();
+    let handedness = if pins.gpio22.into_pull_up_input().is_low().unwrap() {
+        KeyboardHandedness::Left
+    } else {
+        KeyboardHandedness::Right
+    };
     let keyboard = Keyboard::new(
         unsafe { USB_BUS.as_ref().unwrap() },
         key_matrix,
         display,
         connection,
-        is_left_hand,
+        TIMER.as_ref().unwrap().count_down(),
+        handedness,
     );
-    cortex_m::interrupt::free(|cs| {
+    cortex_m::interrupt::free(|cs| unsafe {
         KEYBOARD.borrow(cs).replace(Some(keyboard));
     });
+
+    unsafe {
+        // Enable the USB interrupt
+        pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
+        pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
+    }
     loop {
-        cortex_m::interrupt::free(|cs| {
+        cortex_m::interrupt::free(|cs| unsafe {
             KEYBOARD.borrow(cs).borrow().as_ref().unwrap().main_loop();
         });
     }
@@ -160,16 +168,24 @@ fn main() -> ! {
 #[allow(non_snake_case)]
 #[interrupt]
 fn USBCTRL_IRQ() {
-    cortex_m::interrupt::free(|cs| {
-        KEYBOARD.borrow(cs).borrow().as_ref().unwrap().usb_poll();
+    cortex_m::interrupt::free(|cs| unsafe {
+        KEYBOARD
+            .borrow(cs)
+            .borrow()
+            .as_ref()
+            .map(|keyboard| keyboard.usb_poll())
     });
 }
 
 #[allow(non_snake_case)]
 #[interrupt]
 fn UART0_IRQ() {
-    cortex_m::interrupt::free(|cs| {
-        KEYBOARD.borrow(cs).borrow().as_ref().unwrap().split_poll();
+    cortex_m::interrupt::free(|cs| unsafe {
+        KEYBOARD
+            .borrow(cs)
+            .borrow()
+            .as_ref()
+            .map(|keyboard| keyboard.split_poll())
     });
     cortex_m::asm::sev();
 }

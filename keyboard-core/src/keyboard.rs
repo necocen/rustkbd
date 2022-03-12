@@ -7,6 +7,8 @@ use embedded_graphics::{
     text::Text,
     Drawable,
 };
+use embedded_hal::timer::CountDown;
+use embedded_time::duration::Microseconds;
 use heapless::{String, Vec};
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
@@ -19,21 +21,40 @@ use crate::{
     split_connection::SplitConnection,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyboardState {
+    Undetermined,
+    WaitingForReceiver,
+    Controller,
+    Receiver,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyboardHandedness {
+    NotApplicable,
+    Left,
+    Right,
+}
+
 pub struct Keyboard<
     'b,
     B: UsbBus,
     K: KeySwitches<Identifier = (u8, u8)>,
     D: KeyboardDisplay<Color = BinaryColor>,
     S: SplitConnection,
+    T: CountDown<Time = Microseconds<u64>>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
     usb_hid: RefCell<HIDClass<'b, B>>,
     key_switches: K,
     display: RefCell<D>,
     split_connection: S,
-    is_left_hand: bool,
+    handedness: KeyboardHandedness,
+    split_state: RefCell<KeyboardState>,
     self_buf: RefCell<Vec<(u8, u8), 6>>,
     split_buf: RefCell<Vec<(u8, u8), 6>>,
+    timer: RefCell<T>,
+    count: RefCell<u32>,
 }
 
 impl<
@@ -42,7 +63,8 @@ impl<
         K: KeySwitches<Identifier = (u8, u8)>,
         D: KeyboardDisplay<Color = BinaryColor>,
         S: SplitConnection,
-    > Keyboard<'b, B, K, D, S>
+        T: CountDown<Time = Microseconds<u64>>,
+    > Keyboard<'b, B, K, D, S, T>
 {
     const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
     const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
@@ -52,7 +74,8 @@ impl<
         key_switches: K,
         display: D,
         split_connection: S,
-        is_left_hand: bool,
+        timer: T,
+        handedness: KeyboardHandedness,
     ) -> Self {
         let usb_hid = HIDClass::new(usb_bus_alloc, KeyboardReport::desc(), 10);
         let usb_device = UsbDeviceBuilder::new(usb_bus_alloc, UsbVidPid(0xfeed, 0x802f))
@@ -67,28 +90,47 @@ impl<
             key_switches,
             display: RefCell::new(display),
             split_connection,
-            is_left_hand,
+            handedness,
+            split_state: RefCell::new(KeyboardState::Undetermined),
             self_buf: RefCell::new(Vec::new()),
             split_buf: RefCell::new(Vec::new()),
+            timer: RefCell::new(timer),
+            count: RefCell::new(0),
         }
     }
 
     pub fn main_loop(&self) {
+        *self.count.borrow_mut() += 1;
+        // setup display
+        let mut display = self.display.borrow_mut();
+        let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+        display.clear(BinaryColor::Off).ok();
+
+        if self.is_split_undetermined()
+            && self.usb_device.borrow().state() == UsbDeviceState::Configured
+        {
+            self.split_establish();
+        }
+
         // scan key matrix
         let scan = self.key_switches.scan();
         *self.self_buf.borrow_mut() = scan;
+
         if self.is_controller() {
-            self.split_write();
-            self.split_read();
+            self.split_write_keys();
+            if self.split_read_head_with_timeout() == Some(0x01) {
+                // reply
+                self.split_read_keys();
+            }
         }
         let self_side = self.self_buf.borrow();
         let other_side = self.split_buf.borrow();
-        let key_codes = if self.is_left_hand {
-            self.key_codes(&self_side, &other_side)
-        } else {
-            self.key_codes(&other_side, &self_side)
+        let key_codes = match self.handedness {
+            KeyboardHandedness::NotApplicable | KeyboardHandedness::Left => {
+                self.key_codes(&self_side, &other_side)
+            }
+            KeyboardHandedness::Right => self.key_codes(&other_side, &self_side),
         };
-
         if self.is_controller() {
             let report = KeyboardReport {
                 modifier: 0,
@@ -98,10 +140,6 @@ impl<
             self.usb_hid.borrow().push_input(&report).ok();
         }
 
-        // setup display
-        let mut display = self.display.borrow_mut();
-        display.clear(BinaryColor::Off).ok();
-
         // print pressed keys
         let mut string = String::<6>::new();
         for key in key_codes.iter() {
@@ -109,24 +147,31 @@ impl<
                 string.push((key - 0x1e + b'1') as char).ok();
             }
         }
-        let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
         Text::new(string.as_str(), Point::new(0, 10), char_style)
             .draw(&mut *display)
             .ok();
 
         // display "Receiver" or "Controller"
-        if self.is_receiver() {
-            Text::new("Receiver", Point::new(0, 22), char_style)
-                .draw(&mut *display)
-                .ok();
-        } else {
-            Text::new("Controller", Point::new(0, 22), char_style)
-                .draw(&mut *display)
-                .ok();
-        }
+        let state = match *self.split_state.borrow() {
+            KeyboardState::Undetermined => "Undetermined",
+            KeyboardState::WaitingForReceiver => "Waiting",
+            KeyboardState::Controller => "Controller",
+            KeyboardState::Receiver => "Receiver",
+        };
+        Text::new(state, Point::new(0, 22), char_style)
+            .draw(&mut *display)
+            .ok();
+
+        Text::new(
+            String::<6>::from(*self.count.borrow()).as_str(),
+            Point::new(60, 30),
+            char_style,
+        )
+        .draw(&mut *display)
+        .ok();
 
         if D::REQUIRES_FLUSH {
-            display.flush().ok(); // かなりここ律速
+            display.flush().ok();
         }
     }
 
@@ -137,44 +182,106 @@ impl<
     }
 
     pub fn split_poll(&self) {
-        if self.is_controller() {
+        let head = self.split_read_head_with_timeout();
+        if head.is_none() {
             return;
         }
-        self.split_read();
-        self.split_write();
+        let head = head.unwrap();
+        match head {
+            0x00 => {
+                self.split_read_keys();
+                self.split_write_keys_reply();
+            }
+            0x01 => {
+                // 通常ここには来ないがタイミングの問題で来る場合があるので適切にハンドリングする
+                self.split_read_keys();
+            }
+            0xff => {
+                self.split_connection.write(&[0xfe]);
+                *self.split_state.borrow_mut() = KeyboardState::Receiver;
+            }
+            _ => {}
+        }
     }
 
-    fn split_read(&self) {
+    fn split_read_keys(&self) {
         let mut buf: [u8; 16] = [0; 16];
         self.split_connection.read(&mut buf[..1]);
-        if buf[0] == 0 {
+        let len = buf[0] as usize;
+        if len == 0 {
+            *self.split_buf.borrow_mut() = Vec::new();
             return;
         }
-        let len = (buf[0] as usize) - 1;
-        self.split_connection.read(&mut buf[..len]);
 
+        self.split_connection.read(&mut buf[..(len * 2)]);
         let mut split_buf = self.split_buf.borrow_mut();
-        *split_buf = (0..(len / 2))
+        *split_buf = (0..len)
             .map(|x| x * 2)
             .map(|x| (buf[x], buf[x + 1]))
             .collect();
     }
 
-    fn split_write(&self) {
+    fn split_write_keys(&self) {
         let keys = self.self_buf.borrow();
-        let len = (keys.len() * 2 + 1) as u8;
-        let data = core::iter::once(len)
+        let len = keys.len() as u8;
+        let data = core::iter::once(0x00)
+            .chain(core::iter::once(len))
             .chain(keys.iter().flat_map(|(col, row)| [*col, *row]))
             .collect::<Vec<u8, 15>>();
         self.split_connection.write(&data);
     }
 
-    fn is_controller(&self) -> bool {
-        !self.is_receiver()
+    fn split_write_keys_reply(&self) {
+        let keys = self.self_buf.borrow();
+        let len = keys.len() as u8;
+        let data = core::iter::once(0x01)
+            .chain(core::iter::once(len))
+            .chain(keys.iter().flat_map(|(col, row)| [*col, *row]))
+            .collect::<Vec<u8, 15>>();
+        self.split_connection.write(&data);
     }
 
-    fn is_receiver(&self) -> bool {
-        self.usb_device.borrow().state() != UsbDeviceState::Configured
+    fn split_establish(&self) {
+        *self.split_state.borrow_mut() = KeyboardState::WaitingForReceiver;
+        // とりあえず0xffをアレとする
+        self.split_connection.write(&[0xff]);
+        let mut buf = [0u8; 1];
+        let result = self.split_connection.read_with_timeout(
+            &mut buf,
+            &mut *self.timer.borrow_mut(),
+            Microseconds::<u64>::new(10_000),
+        );
+        if result {
+            if buf[0] == 0xfe {
+                *self.split_state.borrow_mut() = KeyboardState::Controller;
+            } else {
+                *self.split_state.borrow_mut() = KeyboardState::Undetermined;
+            }
+        } else {
+            *self.split_state.borrow_mut() = KeyboardState::Undetermined;
+        }
+    }
+
+    fn split_read_head_with_timeout(&self) -> Option<u8> {
+        let mut buf = [0u8; 1];
+        let result = self.split_connection.read_with_timeout(
+            &mut buf,
+            &mut *self.timer.borrow_mut(),
+            Microseconds::<u64>::new(10_000),
+        );
+        if result {
+            Some(buf[0])
+        } else {
+            None
+        }
+    }
+
+    fn is_controller(&self) -> bool {
+        *self.split_state.borrow() == KeyboardState::Controller
+    }
+
+    fn is_split_undetermined(&self) -> bool {
+        *self.split_state.borrow() == KeyboardState::Undetermined
     }
 
     fn key_codes(&self, left: &[(u8, u8)], right: &[(u8, u8)]) -> [u8; 6] {

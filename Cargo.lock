@@ -314,7 +314,9 @@ version = "0.0.0"
 dependencies = [
  "embedded-graphics",
  "embedded-hal",
+ "embedded-time",
  "heapless",
+ "nb 1.0.0",
  "usb-device",
  "usbd-hid",
  "usbd-hid-macros",
