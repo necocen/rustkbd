@@ -54,7 +54,6 @@ pub struct Keyboard<
     self_buf: RefCell<Vec<(u8, u8), 6>>,
     split_buf: RefCell<Vec<(u8, u8), 6>>,
     timer: RefCell<T>,
-    count: RefCell<u32>,
 }
 
 impl<
@@ -95,12 +94,10 @@ impl<
             self_buf: RefCell::new(Vec::new()),
             split_buf: RefCell::new(Vec::new()),
             timer: RefCell::new(timer),
-            count: RefCell::new(0),
         }
     }
 
     pub fn main_loop(&self) {
-        *self.count.borrow_mut() += 1;
         // setup display
         let mut display = self.display.borrow_mut();
         let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
@@ -161,14 +158,6 @@ impl<
         Text::new(state, Point::new(0, 22), char_style)
             .draw(&mut *display)
             .ok();
-
-        Text::new(
-            String::<6>::from(*self.count.borrow()).as_str(),
-            Point::new(60, 30),
-            char_style,
-        )
-        .draw(&mut *display)
-        .ok();
 
         if D::REQUIRES_FLUSH {
             display.flush().ok();
