@@ -1,4 +1,4 @@
-use keyboard_core::split_connection::SplitConnection;
+use keyboard_core::split::SplitConnection;
 use nb::{Error, Result};
 use rp_pico::hal::uart::{Enabled, UartDevice, UartPeripheral, ValidUartPinout};
 

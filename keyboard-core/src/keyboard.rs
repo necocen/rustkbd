@@ -1,3 +1,6 @@
+mod keyboard_handedness;
+mod keyboard_report;
+mod keyboard_state;
 use core::cell::RefCell;
 
 use embedded_graphics::{
@@ -16,25 +19,11 @@ use usb_device::{
 };
 use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
 
-use crate::{
-    display::KeyboardDisplay, key_switches::KeySwitches, keyboard_report::KeyboardReport,
-    split_connection::SplitConnection,
-};
+use crate::{display::KeyboardDisplay, key_switches::KeySwitches, split::SplitConnection};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KeyboardState {
-    Undetermined,
-    WaitingForReceiver,
-    Controller,
-    Receiver,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KeyboardHandedness {
-    NotApplicable,
-    Left,
-    Right,
-}
+pub use keyboard_handedness::KeyboardHandedness;
+use keyboard_report::KeyboardReport;
+use keyboard_state::KeyboardState;
 
 pub struct Keyboard<
     'b,
