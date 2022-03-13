@@ -41,9 +41,6 @@ mod key_matrix;
 mod ssd1306_display;
 mod uart_connection;
 
-/// The USB Bus Driver (shared with the interrupt).
-static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
-
 type KeyboardType = Keyboard<
     'static,
     UsbBus,
@@ -63,7 +60,10 @@ static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::
 
 #[entry]
 fn main() -> ! {
+    // These variables must be static due to lifetime constraints
     static mut TIMER: Option<Timer> = None;
+    static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
+
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     // The single-cycle I/O block controls our GPIO pins
@@ -98,10 +98,7 @@ fn main() -> ! {
         true,
         &mut pac.RESETS,
     ));
-    unsafe {
-        // Note (safety): This is safe as interrupts haven't been started yet
-        USB_BUS = Some(usb_bus);
-    }
+    *USB_BUS = Some(usb_bus);
 
     let uart_pins = (
         pins.gpio0.into_mode::<FunctionUart>(),
@@ -142,7 +139,7 @@ fn main() -> ! {
         KeyboardHandedness::Right
     };
     let keyboard = Keyboard::new(
-        unsafe { USB_BUS.as_ref().unwrap() },
+        USB_BUS.as_ref().unwrap(),
         key_matrix,
         display,
         connection,
