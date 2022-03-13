@@ -17,11 +17,11 @@ pub struct KeyMatrix<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> {
 impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeyMatrix<D, COLS, ROWS> {
     pub fn new(mut inputs: [DynPin; ROWS], mut outputs: [DynPin; COLS], delay: D) -> Self {
         for pin in inputs.iter_mut() {
-            pin.into_pull_up_input();
+            pin.into_pull_down_input();
         }
         for pin in outputs.iter_mut() {
             pin.into_push_pull_output();
-            pin.set_high().ok();
+            pin.set_low().ok();
         }
         KeyMatrix {
             inputs,
@@ -40,14 +40,14 @@ impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches
         let mut keys = Vec::<Self::Identifier, 6>::new();
         let mut outputs = self.outputs.borrow_mut();
         for i in 0..COLS {
-            outputs[i].set_low().ok();
+            outputs[i].set_high().ok();
             self.delay.borrow_mut().delay_us(20);
             for j in 0..ROWS {
-                if self.inputs[j].is_low().unwrap() {
+                if self.inputs[j].is_high().unwrap() {
                     keys.push((i as u8, j as u8)).ok();
                 }
             }
-            outputs[i].set_high().ok();
+            outputs[i].set_low().ok();
         }
         keys
     }
