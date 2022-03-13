@@ -19,7 +19,11 @@ use usb_device::{
 };
 use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
 
-use crate::{display::KeyboardDisplay, key_switches::KeySwitches, split::SplitConnection};
+use crate::{
+    display::KeyboardDisplay,
+    key_switches::KeySwitches,
+    split::{SplitConnection, SplitConnectionExt, SplitMessage},
+};
 
 pub use keyboard_handedness::KeyboardHandedness;
 use keyboard_report::KeyboardReport;
@@ -104,9 +108,9 @@ impl<
 
         if self.is_controller() {
             self.split_write_keys();
-            if self.split_read_head_with_timeout() == Some(0x01) {
-                // reply
-                self.split_read_keys();
+            if let Some(SplitMessage::KeyInputReply(keys)) = self.split_read_message() {
+                // replied
+                *self.split_buf.borrow_mut() = keys;
             }
         }
         let self_side = self.self_buf.borrow();
@@ -160,87 +164,51 @@ impl<
     }
 
     pub fn split_poll(&self) {
-        let head = self.split_read_head_with_timeout();
-        if head.is_none() {
-            return;
-        }
-        let head = head.unwrap();
-        match head {
-            0x00 => {
-                self.split_read_keys();
+        match self.split_read_message() {
+            Some(SplitMessage::KeyInput(keys)) => {
+                *self.split_buf.borrow_mut() = keys;
                 self.split_write_keys_reply();
             }
-            0x01 => {
+            Some(SplitMessage::KeyInputReply(keys)) => {
                 // 通常ここには来ないがタイミングの問題で来る場合があるので適切にハンドリングする
-                self.split_read_keys();
+                *self.split_buf.borrow_mut() = keys;
             }
-            0xff => {
-                self.split_connection.write(&[0xfe]);
+            Some(SplitMessage::FindReceiver) => {
+                self.split_connection
+                    .send_message(SplitMessage::Acknowledge);
                 *self.split_state.borrow_mut() = KeyboardState::Receiver;
             }
             _ => {}
         }
     }
 
-    fn split_read_keys(&self) {
-        let mut buf: [u8; 16] = [0; 16];
-        self.split_connection.read(&mut buf[..1]);
-        let len = buf[0] as usize;
-        if len == 0 {
-            *self.split_buf.borrow_mut() = Vec::new();
-            return;
-        }
-
-        self.split_connection.read(&mut buf[..(len * 2)]);
-        let mut split_buf = self.split_buf.borrow_mut();
-        *split_buf = (0..len)
-            .map(|x| x * 2)
-            .map(|x| (buf[x], buf[x + 1]))
-            .collect();
-    }
-
     fn split_write_keys(&self) {
-        let keys = self.self_buf.borrow();
-        let len = keys.len() as u8;
-        let data = core::iter::once(0x00)
-            .chain(core::iter::once(len))
-            .chain(keys.iter().flat_map(|(col, row)| [*col, *row]))
-            .collect::<Vec<u8, 15>>();
-        self.split_connection.write(&data);
+        let keys = self.self_buf.borrow().clone();
+        self.split_connection
+            .send_message(SplitMessage::KeyInput(keys));
     }
 
     fn split_write_keys_reply(&self) {
-        let keys = self.self_buf.borrow();
-        let len = keys.len() as u8;
-        let data = core::iter::once(0x01)
-            .chain(core::iter::once(len))
-            .chain(keys.iter().flat_map(|(col, row)| [*col, *row]))
-            .collect::<Vec<u8, 15>>();
-        self.split_connection.write(&data);
+        let keys = self.self_buf.borrow().clone();
+        self.split_connection
+            .send_message(SplitMessage::KeyInputReply(keys));
     }
 
     fn split_establish(&self) {
         *self.split_state.borrow_mut() = KeyboardState::WaitingForReceiver;
-        // とりあえず0xffをアレとする
-        self.split_connection.write(&[0xff]);
-        *self.split_state.borrow_mut() = match self.split_read_head_with_timeout() {
-            Some(0xfe) => KeyboardState::Controller,
+        self.split_connection
+            .send_message(SplitMessage::FindReceiver);
+        *self.split_state.borrow_mut() = match self.split_read_message() {
+            Some(SplitMessage::Acknowledge) => KeyboardState::Controller,
             _ => KeyboardState::Undetermined,
         };
     }
 
-    fn split_read_head_with_timeout(&self) -> Option<u8> {
-        let mut buf = [0u8; 1];
-        let result = self.split_connection.read_with_timeout(
-            &mut buf,
+    fn split_read_message(&self) -> Option<SplitMessage> {
+        self.split_connection.read_message(
             &mut *self.timer.borrow_mut(),
-            Microseconds::<u64>::new(10_000),
-        );
-        if result {
-            Some(buf[0])
-        } else {
-            None
-        }
+            Microseconds::<u64>::new(10_000), // timeout in 10ms
+        )
     }
 
     fn is_controller(&self) -> bool {
