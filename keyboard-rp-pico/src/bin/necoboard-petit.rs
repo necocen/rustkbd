@@ -11,9 +11,10 @@ use cortex_m::{
 use cortex_m_rt::entry;
 use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
-use keyboard_core::keyboard::{Keyboard, KeyboardHandedness};
+use keyboard_core::keyboard::Keyboard;
 use keyboard_rp_pico::{
-    key_matrix::KeyMatrix, ssd1306_display::Ssd1306Display, uart_connection::UartConnection,
+    split_key_matrix::SplitKeyMatrix, split_layout::SplitLayout, ssd1306_display::Ssd1306Display,
+    uart_connection::UartConnection,
 };
 use rp_pico::{
     hal::{
@@ -39,8 +40,9 @@ use usb_device::class_prelude::UsbBusAllocator;
 
 type KeyboardType = Keyboard<
     'static,
+    3,
     UsbBus,
-    KeyMatrix<Delay, 2, 2>,
+    SplitKeyMatrix<Delay, 2, 2>,
     Ssd1306Display<
         SPIInterface<
             Spi<Enabled, SPI0, 8>,
@@ -51,6 +53,7 @@ type KeyboardType = Keyboard<
     >,
     UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
     CountDown<'static>,
+    SplitLayout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
 
@@ -124,23 +127,20 @@ fn main() -> ! {
     ssd1306.init().ok();
     let display = Ssd1306Display(ssd1306);
 
-    let key_matrix = KeyMatrix::new(
+    let key_matrix = SplitKeyMatrix::new(
         [pins.gpio16.into(), pins.gpio17.into()],
         [pins.gpio14.into(), pins.gpio15.into()],
         delay,
+        pins.gpio22.into_pull_up_input().is_low().unwrap(),
     );
-    let handedness = if pins.gpio22.into_pull_up_input().is_low().unwrap() {
-        KeyboardHandedness::Left
-    } else {
-        KeyboardHandedness::Right
-    };
+    let layout = SplitLayout::default();
     let keyboard = Keyboard::new(
         USB_BUS.as_ref().unwrap(),
         key_matrix,
         display,
         connection,
         TIMER.as_ref().unwrap().count_down(),
-        handedness,
+        layout,
     );
     cortex_m::interrupt::free(|cs| unsafe {
         KEYBOARD.borrow(cs).replace(Some(keyboard));

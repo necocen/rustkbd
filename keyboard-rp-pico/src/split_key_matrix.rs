@@ -8,14 +8,22 @@ use heapless::Vec;
 use keyboard_core::key_switches::KeySwitches;
 use rp_pico::hal::gpio::DynPin;
 
-pub struct KeyMatrix<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> {
+use crate::split_switch_identifier::SplitKeySwitchIdentifier;
+
+pub struct SplitKeyMatrix<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> {
     inputs: [DynPin; ROWS],
     outputs: RefCell<[DynPin; COLS]>,
     delay: RefCell<D>,
+    is_left: bool,
 }
 
-impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeyMatrix<D, COLS, ROWS> {
-    pub fn new(mut inputs: [DynPin; ROWS], mut outputs: [DynPin; COLS], delay: D) -> Self {
+impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> SplitKeyMatrix<D, COLS, ROWS> {
+    pub fn new(
+        mut inputs: [DynPin; ROWS],
+        mut outputs: [DynPin; COLS],
+        delay: D,
+        is_left: bool,
+    ) -> Self {
         for pin in inputs.iter_mut() {
             pin.into_pull_down_input();
         }
@@ -23,18 +31,19 @@ impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeyMatrix<D, COLS, R
             pin.into_push_pull_output();
             pin.set_low().ok();
         }
-        KeyMatrix {
+        SplitKeyMatrix {
             inputs,
             outputs: RefCell::new(outputs),
             delay: RefCell::new(delay),
+            is_left,
         }
     }
 }
 
-impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches
-    for KeyMatrix<D, COLS, ROWS>
+impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches<3>
+    for SplitKeyMatrix<D, COLS, ROWS>
 {
-    type Identifier = (u8, u8);
+    type Identifier = SplitKeySwitchIdentifier;
 
     fn scan(&self) -> Vec<Self::Identifier, 6> {
         let mut keys = Vec::<Self::Identifier, 6>::new();
@@ -44,7 +53,13 @@ impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches
             self.delay.borrow_mut().delay_us(20);
             for j in 0..ROWS {
                 if self.inputs[j].is_high().unwrap() {
-                    keys.push((i as u8, j as u8)).ok();
+                    if self.is_left {
+                        keys.push(SplitKeySwitchIdentifier::Left(i as u8, j as u8))
+                            .ok();
+                    } else {
+                        keys.push(SplitKeySwitchIdentifier::Right(i as u8, j as u8))
+                            .ok();
+                    }
                 }
             }
             outputs[i].set_low().ok();

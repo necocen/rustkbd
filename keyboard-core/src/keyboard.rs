@@ -21,7 +21,7 @@ use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
 
 use crate::{
     display::KeyboardDisplay,
-    key_switches::KeySwitches,
+    key_switches::{KeySwitchIdentifier, KeySwitches},
     split::{SplitConnection, SplitConnectionExt, SplitMessage},
 };
 
@@ -29,45 +29,52 @@ pub use keyboard_handedness::KeyboardHandedness;
 use keyboard_report::KeyboardReport;
 use keyboard_state::KeyboardState;
 
+pub trait KeyLayout<const SZ: usize> {
+    type Identifier: KeySwitchIdentifier<SZ>;
+
+    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; 6];
+}
+
 pub struct Keyboard<
     'b,
+    const SZ: usize,
     B: UsbBus,
-    K: KeySwitches<Identifier = (u8, u8)>,
+    K: KeySwitches<SZ>,
     D: KeyboardDisplay<Color = BinaryColor>,
     S: SplitConnection,
     T: CountDown<Time = Microseconds<u64>>,
+    L: KeyLayout<SZ, Identifier = K::Identifier>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
     usb_hid: RefCell<HIDClass<'b, B>>,
     key_switches: K,
     display: RefCell<D>,
     split_connection: S,
-    handedness: KeyboardHandedness,
     split_state: RefCell<KeyboardState>,
-    self_buf: RefCell<Vec<(u8, u8), 6>>,
-    split_buf: RefCell<Vec<(u8, u8), 6>>,
+    self_buf: RefCell<Vec<K::Identifier, 6>>,
+    split_buf: RefCell<Vec<K::Identifier, 6>>,
     timer: RefCell<T>,
+    layout: L,
 }
 
 impl<
         'b,
+        const SZ: usize,
         B: UsbBus,
-        K: KeySwitches<Identifier = (u8, u8)>,
+        K: KeySwitches<SZ>,
         D: KeyboardDisplay<Color = BinaryColor>,
         S: SplitConnection,
         T: CountDown<Time = Microseconds<u64>>,
-    > Keyboard<'b, B, K, D, S, T>
+        L: KeyLayout<SZ, Identifier = K::Identifier>,
+    > Keyboard<'b, SZ, B, K, D, S, T, L>
 {
-    const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
-    const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
-
     pub fn new(
         usb_bus_alloc: &'b UsbBusAllocator<B>,
         key_switches: K,
         display: D,
         split_connection: S,
         timer: T,
-        handedness: KeyboardHandedness,
+        layout: L,
     ) -> Self {
         let usb_hid = HIDClass::new(usb_bus_alloc, KeyboardReport::desc(), 10);
         let usb_device = UsbDeviceBuilder::new(usb_bus_alloc, UsbVidPid(0xfeed, 0x802f))
@@ -82,11 +89,11 @@ impl<
             key_switches,
             display: RefCell::new(display),
             split_connection,
-            handedness,
             split_state: RefCell::new(KeyboardState::Undetermined),
             self_buf: RefCell::new(Vec::new()),
             split_buf: RefCell::new(Vec::new()),
             timer: RefCell::new(timer),
+            layout,
         }
     }
 
@@ -115,12 +122,14 @@ impl<
         }
         let self_side = self.self_buf.borrow();
         let other_side = self.split_buf.borrow();
-        let key_codes = match self.handedness {
-            KeyboardHandedness::NotApplicable | KeyboardHandedness::Left => {
-                self.key_codes(&self_side, &other_side)
-            }
-            KeyboardHandedness::Right => self.key_codes(&other_side, &self_side),
-        };
+        let keys = self_side
+            .iter()
+            .chain(other_side.iter())
+            .take(6)
+            .copied()
+            .map(From::from)
+            .collect::<Vec<K::Identifier, 6>>();
+        let key_codes = self.layout.key_codes(&keys);
         if self.is_controller() {
             let report = KeyboardReport {
                 modifier: 0,
@@ -175,7 +184,7 @@ impl<
             }
             Some(SplitMessage::FindReceiver) => {
                 self.split_connection
-                    .send_message(SplitMessage::Acknowledge);
+                    .send_message(SplitMessage::<SZ, K::Identifier>::Acknowledge);
                 *self.split_state.borrow_mut() = KeyboardState::Receiver;
             }
             _ => {}
@@ -197,14 +206,14 @@ impl<
     fn split_establish(&self) {
         *self.split_state.borrow_mut() = KeyboardState::WaitingForReceiver;
         self.split_connection
-            .send_message(SplitMessage::FindReceiver);
+            .send_message(SplitMessage::<SZ, K::Identifier>::FindReceiver);
         *self.split_state.borrow_mut() = match self.split_read_message() {
             Some(SplitMessage::Acknowledge) => KeyboardState::Controller,
             _ => KeyboardState::Undetermined,
         };
     }
 
-    fn split_read_message(&self) -> Option<SplitMessage> {
+    fn split_read_message(&self) -> Option<SplitMessage<SZ, K::Identifier>> {
         self.split_connection.read_message(
             &mut *self.timer.borrow_mut(),
             Microseconds::<u64>::new(10_000), // timeout in 10ms
@@ -217,21 +226,5 @@ impl<
 
     fn is_split_undetermined(&self) -> bool {
         *self.split_state.borrow() == KeyboardState::Undetermined
-    }
-
-    fn key_codes(&self, left: &[(u8, u8)], right: &[(u8, u8)]) -> [u8; 6] {
-        let mut keys = [0u8; 6];
-
-        let left = left
-            .iter()
-            .map(|(col, row)| Self::KEY_CODES_LEFT[*col as usize][*row as usize]);
-        let right = right
-            .iter()
-            .map(|(col, row)| Self::KEY_CODES_RIGHT[*col as usize][*row as usize]);
-
-        for (i, key) in left.chain(right).take(6).enumerate() {
-            keys[i] = key;
-        }
-        keys
     }
 }

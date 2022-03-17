@@ -2,6 +2,8 @@ use embedded_hal::timer::CountDown;
 use heapless::Vec;
 use nb;
 
+use crate::key_switches::KeySwitchIdentifier;
+
 use super::split_message::SplitMessage;
 
 pub trait SplitConnection {
@@ -47,11 +49,11 @@ pub trait SplitConnection {
 }
 
 pub trait SplitConnectionExt: SplitConnection {
-    fn read_message<C: CountDown>(
+    fn read_message<C: CountDown, const SZ: usize, SI: KeySwitchIdentifier<SZ>>(
         &self,
         timer: &mut C,
         timeout: impl Into<C::Time>,
-    ) -> Option<SplitMessage> {
+    ) -> Option<SplitMessage<SZ, SI>> {
         let mut buf = [0u8; 16];
         let result = self.read_with_timeout(&mut buf[..1], timer, timeout);
         if !result {
@@ -72,11 +74,15 @@ pub trait SplitConnectionExt: SplitConnection {
                 } else if len > 8 {
                     None // TODO: エラー
                 } else {
-                    self.read(&mut buf[..(len * 2)]);
-                    let keys: Vec<(u8, u8), 6> = (0..len)
-                        .map(|x| x * 2)
-                        .map(|x| (buf[x], buf[x + 1]))
-                        .collect();
+                    self.read(&mut buf[..(len * SZ)]);
+                    let keys = (0..len)
+                        .map(|x| x * SZ)
+                        .map(|x| {
+                            let mut b: [u8; SZ] = [0; SZ];
+                            b.copy_from_slice(&buf[x..(x + SZ)]);
+                            b.into()
+                        })
+                        .collect::<Vec<SI, 6>>();
                     Some(ctor(keys))
                 }
             }
@@ -86,7 +92,10 @@ pub trait SplitConnectionExt: SplitConnection {
         }
     }
 
-    fn send_message(&self, message: SplitMessage) {
+    fn send_message<const SZ: usize, SI: KeySwitchIdentifier<SZ>>(
+        &self,
+        message: SplitMessage<SZ, SI>,
+    ) {
         match message {
             SplitMessage::KeyInput(ref keys) | SplitMessage::KeyInputReply(ref keys) => {
                 let head = if let SplitMessage::KeyInput(_) = message {
@@ -97,8 +106,11 @@ pub trait SplitConnectionExt: SplitConnection {
                 let len = keys.len() as u8;
                 let data = core::iter::once(head)
                     .chain(core::iter::once(len))
-                    .chain(keys.iter().flat_map(|(col, row)| [*col, *row]))
-                    .collect::<Vec<u8, 18>>();
+                    .chain(
+                        keys.into_iter()
+                            .flat_map::<[u8; SZ], _>(|key| (*key).into()),
+                    )
+                    .collect::<Vec<u8, 32>>();
                 self.write(&data);
             }
             SplitMessage::Acknowledge => {
