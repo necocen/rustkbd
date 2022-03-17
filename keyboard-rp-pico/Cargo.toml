@@ -1,12 +1,8 @@
 [package]
-name = "main"
+name = "keyboard-rp-pico"
 version = "0.0.0"
 authors = ["necocen <necocen@gmail.com>"]
 edition = "2021"
-
-[[bin]]
-name = "rustkbd"
-path = "src/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

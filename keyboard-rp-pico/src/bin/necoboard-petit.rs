@@ -11,8 +11,10 @@ use cortex_m::{
 use cortex_m_rt::entry;
 use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
-use key_matrix::KeyMatrix;
 use keyboard_core::keyboard::{Keyboard, KeyboardHandedness};
+use keyboard_rp_pico::{
+    key_matrix::KeyMatrix, ssd1306_display::Ssd1306Display, uart_connection::UartConnection,
+};
 use rp_pico::{
     hal::{
         self,
@@ -33,13 +35,7 @@ use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
     Ssd1306,
 };
-use ssd1306_display::Ssd1306Display;
-use uart_connection::UartConnection;
 use usb_device::class_prelude::UsbBusAllocator;
-
-mod key_matrix;
-mod ssd1306_display;
-mod uart_connection;
 
 type KeyboardType = Keyboard<
     'static,
