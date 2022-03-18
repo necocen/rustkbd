@@ -21,7 +21,8 @@ use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
 
 use crate::{
     display::KeyboardDisplay,
-    key_switches::{KeySwitchIdentifier, KeySwitches},
+    key_switches::KeySwitches,
+    layout::KeyLayout,
     split::{SplitConnection, SplitConnectionExt, SplitMessage},
 };
 
@@ -30,12 +31,6 @@ use keyboard_report::KeyboardReport;
 use keyboard_state::KeyboardState;
 
 pub(crate) const NUM_ROLLOVER: usize = 6;
-
-pub trait KeyLayout<const SZ: usize> {
-    type Identifier: KeySwitchIdentifier<SZ>;
-
-    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; NUM_ROLLOVER];
-}
 
 pub struct Keyboard<
     'b,
