@@ -29,10 +29,12 @@ pub use keyboard_handedness::KeyboardHandedness;
 use keyboard_report::KeyboardReport;
 use keyboard_state::KeyboardState;
 
+pub(crate) const NUM_ROLLOVER: usize = 6;
+
 pub trait KeyLayout<const SZ: usize> {
     type Identifier: KeySwitchIdentifier<SZ>;
 
-    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; 6];
+    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; NUM_ROLLOVER];
 }
 
 pub struct Keyboard<
@@ -127,10 +129,10 @@ impl<
         let keys = self_side
             .iter()
             .chain(other_side.iter())
-            .take(6)
+            .take(NUM_ROLLOVER)
             .copied()
             .map(From::from)
-            .collect::<Vec<K::Identifier, 6>>();
+            .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
         let key_codes = self.layout.key_codes(&keys);
         if self.is_controller() {
             let report = KeyboardReport {
@@ -142,7 +144,7 @@ impl<
         }
 
         // print pressed keys
-        let mut string = String::<6>::new();
+        let mut string = String::<NUM_ROLLOVER>::new();
         for key in key_codes.iter() {
             if *key != 0 {
                 string.push((key - 0x1e + b'1') as char).ok();
