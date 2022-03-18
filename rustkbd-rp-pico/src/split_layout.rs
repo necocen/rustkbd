@@ -1,4 +1,4 @@
-use keyboard_core::layout::KeyLayout;
+use rustkbd_core::layout::KeyLayout;
 
 use crate::split_switch_identifier::SplitKeySwitchIdentifier;
 

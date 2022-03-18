@@ -1,8 +1,8 @@
 [package]
-name = "keyboard-core"
+name = "rustkbd-core"
 version = "0.0.0"
 authors = ["necocen <necocen@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

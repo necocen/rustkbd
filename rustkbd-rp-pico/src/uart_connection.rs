@@ -1,6 +1,6 @@
-use keyboard_core::split::SplitConnection;
 use nb::{Error, Result};
 use rp_pico::hal::uart::{Enabled, UartDevice, UartPeripheral, ValidUartPinout};
+use rustkbd_core::split::SplitConnection;
 
 pub struct UartConnection<D: UartDevice, P: ValidUartPinout<D>>(pub UartPeripheral<Enabled, D, P>);
 

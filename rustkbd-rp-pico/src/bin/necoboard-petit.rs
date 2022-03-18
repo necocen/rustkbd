@@ -11,11 +11,6 @@ use cortex_m::{
 use cortex_m_rt::entry;
 use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
-use keyboard_core::keyboard::Keyboard;
-use keyboard_rp_pico::{
-    split_key_matrix::SplitKeyMatrix, split_layout::SplitLayout, ssd1306_display::Ssd1306Display,
-    uart_connection::UartConnection,
-};
 use rp_pico::{
     hal::{
         self,
@@ -31,6 +26,11 @@ use rp_pico::{
         Spi, Timer,
     },
     pac::{self, interrupt, SPI0, UART0},
+};
+use rustkbd_core::keyboard::Keyboard;
+use rustkbd_rp_pico::{
+    split_key_matrix::SplitKeyMatrix, split_layout::SplitLayout, ssd1306_display::Ssd1306Display,
+    uart_connection::UartConnection,
 };
 use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,

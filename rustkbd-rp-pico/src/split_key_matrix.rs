@@ -5,8 +5,8 @@ use embedded_hal::{
     digital::v2::{InputPin, OutputPin},
 };
 use heapless::Vec;
-use keyboard_core::key_switches::KeySwitches;
 use rp_pico::hal::gpio::DynPin;
+use rustkbd_core::key_switches::KeySwitches;
 
 use crate::split_switch_identifier::SplitKeySwitchIdentifier;
 

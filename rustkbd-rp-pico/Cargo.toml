@@ -1,5 +1,5 @@
 [package]
-name = "keyboard-rp-pico"
+name = "rustkbd-rp-pico"
 version = "0.0.0"
 authors = ["necocen <necocen@gmail.com>"]
 edition = "2021"
@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 panic-halt = "0.2.0"
-keyboard-core = { path = "../keyboard-core" }
+rustkbd-core = { path = "../rustkbd-core" }
 ssd1306 = "0.7.0"
 embedded-graphics = "0.7.1"
 heapless = "0.7.10"

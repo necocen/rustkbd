@@ -309,41 +309,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "keyboard-core"
-version = "0.0.0"
-dependencies = [
- "embedded-graphics",
- "embedded-hal",
- "embedded-time",
- "heapless",
- "nb 1.0.0",
- "usb-device",
- "usbd-hid",
- "usbd-hid-macros",
-]
-
-[[package]]
-name = "keyboard-rp-pico"
-version = "0.0.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "defmt",
- "defmt-rtt",
- "display-interface",
- "embedded-graphics",
- "embedded-hal",
- "embedded-time",
- "heapless",
- "keyboard-core",
- "nb 1.0.0",
- "panic-halt",
- "rp-pico",
- "ssd1306",
- "usb-device",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -641,6 +606,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 dependencies = [
  "semver",
+]
+
+[[package]]
+name = "rustkbd-core"
+version = "0.0.0"
+dependencies = [
+ "embedded-graphics",
+ "embedded-hal",
+ "embedded-time",
+ "heapless",
+ "nb 1.0.0",
+ "usb-device",
+ "usbd-hid",
+ "usbd-hid-macros",
+]
+
+[[package]]
+name = "rustkbd-rp-pico"
+version = "0.0.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt",
+ "defmt-rtt",
+ "display-interface",
+ "embedded-graphics",
+ "embedded-hal",
+ "embedded-time",
+ "heapless",
+ "nb 1.0.0",
+ "panic-halt",
+ "rp-pico",
+ "rustkbd-core",
+ "ssd1306",
+ "usb-device",
 ]
 
 [[package]]

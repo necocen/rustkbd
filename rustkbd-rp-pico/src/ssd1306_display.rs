@@ -1,5 +1,5 @@
 use embedded_graphics::{draw_target::DrawTarget, prelude::*, primitives::Rectangle};
-use keyboard_core::display::KeyboardDisplay;
+use rustkbd_core::display::KeyboardDisplay;
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, size::DisplaySize, Ssd1306};
 
 pub struct Ssd1306Display<DI: WriteOnlyDataCommand, SIZE: DisplaySize>(
