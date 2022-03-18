@@ -41,6 +41,7 @@ use usb_device::class_prelude::UsbBusAllocator;
 type KeyboardType = Keyboard<
     'static,
     3,
+    12,
     UsbBus,
     SplitKeyMatrix<Delay, 2, 2>,
     Ssd1306Display<

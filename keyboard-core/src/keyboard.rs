@@ -38,8 +38,9 @@ pub trait KeyLayout<const SZ: usize> {
 pub struct Keyboard<
     'b,
     const SZ: usize,
+    const RO: usize,
     B: UsbBus,
-    K: KeySwitches<SZ>,
+    K: KeySwitches<SZ, RO>,
     D: KeyboardDisplay<Color = BinaryColor>,
     S: SplitConnection,
     T: CountDown<Time = Microseconds<u64>>,
@@ -51,8 +52,8 @@ pub struct Keyboard<
     display: RefCell<D>,
     split_connection: S,
     split_state: RefCell<KeyboardState>,
-    self_buf: RefCell<Vec<K::Identifier, 6>>,
-    split_buf: RefCell<Vec<K::Identifier, 6>>,
+    self_buf: RefCell<Vec<K::Identifier, RO>>,
+    split_buf: RefCell<Vec<K::Identifier, RO>>,
     timer: RefCell<T>,
     layout: L,
 }
@@ -60,13 +61,14 @@ pub struct Keyboard<
 impl<
         'b,
         const SZ: usize,
+        const RO: usize,
         B: UsbBus,
-        K: KeySwitches<SZ>,
+        K: KeySwitches<SZ, RO>,
         D: KeyboardDisplay<Color = BinaryColor>,
         S: SplitConnection,
         T: CountDown<Time = Microseconds<u64>>,
         L: KeyLayout<SZ, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, B, K, D, S, T, L>
+    > Keyboard<'b, SZ, RO, B, K, D, S, T, L>
 {
     pub fn new(
         usb_bus_alloc: &'b UsbBusAllocator<B>,
@@ -184,7 +186,7 @@ impl<
             }
             Some(SplitMessage::FindReceiver) => {
                 self.split_connection
-                    .send_message(SplitMessage::<SZ, K::Identifier>::Acknowledge);
+                    .send_message(SplitMessage::<SZ, RO, K::Identifier>::Acknowledge);
                 *self.split_state.borrow_mut() = KeyboardState::Receiver;
             }
             _ => {}
@@ -206,14 +208,14 @@ impl<
     fn split_establish(&self) {
         *self.split_state.borrow_mut() = KeyboardState::WaitingForReceiver;
         self.split_connection
-            .send_message(SplitMessage::<SZ, K::Identifier>::FindReceiver);
+            .send_message(SplitMessage::<SZ, RO, K::Identifier>::FindReceiver);
         *self.split_state.borrow_mut() = match self.split_read_message() {
             Some(SplitMessage::Acknowledge) => KeyboardState::Controller,
             _ => KeyboardState::Undetermined,
         };
     }
 
-    fn split_read_message(&self) -> Option<SplitMessage<SZ, K::Identifier>> {
+    fn split_read_message(&self) -> Option<SplitMessage<SZ, RO, K::Identifier>> {
         self.split_connection.read_message(
             &mut *self.timer.borrow_mut(),
             Microseconds::<u64>::new(10_000), // timeout in 10ms

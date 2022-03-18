@@ -40,13 +40,13 @@ impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> SplitKeyMatrix<D, CO
     }
 }
 
-impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches<3>
+impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches<3, 12>
     for SplitKeyMatrix<D, COLS, ROWS>
 {
     type Identifier = SplitKeySwitchIdentifier;
 
-    fn scan(&self) -> Vec<Self::Identifier, 6> {
-        let mut keys = Vec::<Self::Identifier, 6>::new();
+    fn scan(&self) -> Vec<Self::Identifier, 12> {
+        let mut keys = Vec::<Self::Identifier, 12>::new();
         let mut outputs = self.outputs.borrow_mut();
         for i in 0..COLS {
             outputs[i].set_high().ok();

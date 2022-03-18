@@ -48,13 +48,20 @@ pub trait SplitConnection {
     }
 }
 
+/// 一度に書き込む最大バイト数
+const MAX_BUF_LEN: usize = 40;
+
 pub trait SplitConnectionExt: SplitConnection {
-    fn read_message<C: CountDown, const SZ: usize, SI: KeySwitchIdentifier<SZ>>(
+    fn read_message<C: CountDown, const SZ: usize, const RO: usize, SI: KeySwitchIdentifier<SZ>>(
         &self,
         timer: &mut C,
         timeout: impl Into<C::Time>,
-    ) -> Option<SplitMessage<SZ, SI>> {
-        let mut buf = [0u8; 16];
+    ) -> Option<SplitMessage<SZ, RO, SI>> {
+        assert!(
+            MAX_BUF_LEN > SZ * RO,
+            "MAX_BUF_LEN must be large enough to read SI bytes x RO keys"
+        );
+        let mut buf = [0u8; MAX_BUF_LEN];
         let result = self.read_with_timeout(&mut buf[..1], timer, timeout);
         if !result {
             return None;
@@ -71,7 +78,7 @@ pub trait SplitConnectionExt: SplitConnection {
                 let len = buf[0] as usize;
                 if len == 0 {
                     Some(ctor(Vec::new()))
-                } else if len > 8 {
+                } else if len > RO {
                     None // TODO: エラー
                 } else {
                     self.read(&mut buf[..(len * SZ)]);
@@ -82,7 +89,7 @@ pub trait SplitConnectionExt: SplitConnection {
                             b.copy_from_slice(&buf[x..(x + SZ)]);
                             b.into()
                         })
-                        .collect::<Vec<SI, 6>>();
+                        .collect();
                     Some(ctor(keys))
                 }
             }
@@ -92,10 +99,14 @@ pub trait SplitConnectionExt: SplitConnection {
         }
     }
 
-    fn send_message<const SZ: usize, SI: KeySwitchIdentifier<SZ>>(
+    fn send_message<const SZ: usize, const RO: usize, SI: KeySwitchIdentifier<SZ>>(
         &self,
-        message: SplitMessage<SZ, SI>,
+        message: SplitMessage<SZ, RO, SI>,
     ) {
+        assert!(
+            MAX_BUF_LEN > SZ * RO,
+            "MAX_BUF_LEN must be large enough to write SI bytes x RO keys"
+        );
         match message {
             SplitMessage::KeyInput(ref keys) | SplitMessage::KeyInputReply(ref keys) => {
                 let head = if let SplitMessage::KeyInput(_) = message {
@@ -110,7 +121,7 @@ pub trait SplitConnectionExt: SplitConnection {
                         keys.into_iter()
                             .flat_map::<[u8; SZ], _>(|key| (*key).into()),
                     )
-                    .collect::<Vec<u8, 32>>();
+                    .collect::<Vec<u8, MAX_BUF_LEN>>();
                 self.write(&data);
             }
             SplitMessage::Acknowledge => {
