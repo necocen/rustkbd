@@ -41,7 +41,7 @@ pub struct Keyboard<
     D: KeyboardDisplay<Color = BinaryColor>,
     S: SplitConnection,
     T: CountDown<Time = Microseconds<u64>>,
-    L: KeyLayout<SZ, Identifier = K::Identifier>,
+    L: KeyLayout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
     usb_hid: RefCell<HIDClass<'b, B>>,
@@ -63,7 +63,7 @@ impl<
         D: KeyboardDisplay<Color = BinaryColor>,
         S: SplitConnection,
         T: CountDown<Time = Microseconds<u64>>,
-        L: KeyLayout<SZ, Identifier = K::Identifier>,
+        L: KeyLayout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
     > Keyboard<'b, SZ, B, K, D, S, T, L>
 {
     pub fn new(

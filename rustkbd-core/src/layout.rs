@@ -1,7 +1,7 @@
-use crate::{key_switches::KeySwitchIdentifier, keyboard::NUM_ROLLOVER};
+use crate::key_switches::KeySwitchIdentifier;
 
-pub trait KeyLayout<const SZ: usize> {
+pub trait KeyLayout<const SZ: usize, const RO: usize> {
     type Identifier: KeySwitchIdentifier<SZ>;
 
-    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; NUM_ROLLOVER];
+    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; RO];
 }

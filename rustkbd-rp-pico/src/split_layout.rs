@@ -11,7 +11,7 @@ impl SplitLayout {
     const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
 }
 
-impl KeyLayout<3> for SplitLayout {
+impl KeyLayout<3, 6> for SplitLayout {
     type Identifier = SplitKeySwitchIdentifier;
 
     fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; 6] {
