@@ -2,7 +2,7 @@ use embedded_hal::timer::CountDown;
 use heapless::Vec;
 use nb;
 
-use crate::key_switches::KeySwitchIdentifier;
+use crate::keyboard::KeySwitchIdentifier;
 
 use super::split_message::SplitMessage;
 

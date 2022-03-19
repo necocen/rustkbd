@@ -6,7 +6,7 @@ use embedded_hal::{
 };
 use heapless::Vec;
 use rp_pico::hal::gpio::DynPin;
-use rustkbd_core::key_switches::KeySwitches;
+use rustkbd_core::keyboard::KeySwitches;
 
 use crate::split_switch_identifier::SplitKeySwitchIdentifier;
 

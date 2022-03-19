@@ -1,5 +1,6 @@
 mod device_info;
 mod hid_report;
+mod key_switches;
 use core::cell::RefCell;
 
 use embedded_graphics::{
@@ -20,14 +21,14 @@ use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
 
 use crate::{
     display::KeyboardDisplay,
-    key_switches::KeySwitches,
-    layout::KeyLayout,
+    layout::Layout,
     split::{SplitConnection, SplitConnectionExt, SplitMessage, SplitState},
 };
 
 use hid_report::HidKeyboardReport;
 
 pub use device_info::DeviceInfo;
+pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
@@ -42,7 +43,7 @@ pub struct Keyboard<
     D: KeyboardDisplay<Color = BinaryColor>,
     S: SplitConnection,
     T: CountDown<Time = Microseconds<u64>>,
-    L: KeyLayout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
+    L: Layout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
     usb_hid: RefCell<HIDClass<'b, B>>,
@@ -64,7 +65,7 @@ impl<
         D: KeyboardDisplay<Color = BinaryColor>,
         S: SplitConnection,
         T: CountDown<Time = Microseconds<u64>>,
-        L: KeyLayout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
+        L: Layout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
     > Keyboard<'b, SZ, B, K, D, S, T, L>
 {
     pub fn new(

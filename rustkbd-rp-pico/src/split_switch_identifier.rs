@@ -1,4 +1,4 @@
-use rustkbd_core::key_switches::KeySwitchIdentifier;
+use rustkbd_core::keyboard::KeySwitchIdentifier;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SplitKeySwitchIdentifier {

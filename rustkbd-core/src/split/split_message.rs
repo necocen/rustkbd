@@ -1,6 +1,6 @@
 use heapless::Vec;
 
-use crate::key_switches::KeySwitchIdentifier;
+use crate::keyboard::KeySwitchIdentifier;
 
 #[derive(Debug, Clone)]
 pub enum SplitMessage<const SZ: usize, const RO: usize, SI: KeySwitchIdentifier<SZ>> {
