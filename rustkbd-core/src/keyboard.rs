@@ -1,5 +1,4 @@
-mod keyboard_handedness;
-mod keyboard_report;
+mod hid_report;
 use core::cell::RefCell;
 
 use embedded_graphics::{
@@ -25,8 +24,7 @@ use crate::{
     split::{SplitConnection, SplitConnectionExt, SplitMessage, SplitState},
 };
 
-pub use keyboard_handedness::KeyboardHandedness;
-use keyboard_report::KeyboardReport;
+use hid_report::HidKeyboardReport;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
@@ -74,7 +72,7 @@ impl<
         timer: T,
         layout: L,
     ) -> Self {
-        let usb_hid = HIDClass::new(usb_bus_alloc, KeyboardReport::desc(), 10);
+        let usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
         let usb_device = UsbDeviceBuilder::new(usb_bus_alloc, UsbVidPid(0xfeed, 0x802f))
             .manufacturer("necocen")
             .product("necoboard")
@@ -129,7 +127,7 @@ impl<
             .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
         let key_codes = self.layout.key_codes(&keys);
         if self.is_controller() {
-            let report = KeyboardReport {
+            let report = HidKeyboardReport {
                 modifier: 0,
                 reserved: 0,
                 key_codes,

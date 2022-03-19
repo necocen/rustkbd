@@ -18,7 +18,7 @@ use usbd_hid_macros::gen_hid_descriptor;
     }
 )]
 #[repr(C)]
-pub struct KeyboardReport {
+pub struct HidKeyboardReport {
     pub modifier: u8,
     pub reserved: u8,
     pub key_codes: [u8; 6],
