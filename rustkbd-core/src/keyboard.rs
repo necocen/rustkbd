@@ -28,14 +28,16 @@ use crate::{
 pub use keyboard_handedness::KeyboardHandedness;
 use keyboard_report::KeyboardReport;
 
+/// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
+/// キースイッチレベルでのロールオーバー数。modifier keysを含めるので6より大きい。
+pub(crate) const NUM_SWITCH_ROLLOVER: usize = 12;
 
 pub struct Keyboard<
     'b,
     const SZ: usize,
-    const RO: usize,
     B: UsbBus,
-    K: KeySwitches<SZ, RO>,
+    K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
     D: KeyboardDisplay<Color = BinaryColor>,
     S: SplitConnection,
     T: CountDown<Time = Microseconds<u64>>,
@@ -47,8 +49,8 @@ pub struct Keyboard<
     display: RefCell<D>,
     split_connection: S,
     split_state: RefCell<SplitState>,
-    self_buf: RefCell<Vec<K::Identifier, RO>>,
-    split_buf: RefCell<Vec<K::Identifier, RO>>,
+    self_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
+    split_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
     timer: RefCell<T>,
     layout: L,
 }
@@ -56,14 +58,13 @@ pub struct Keyboard<
 impl<
         'b,
         const SZ: usize,
-        const RO: usize,
         B: UsbBus,
-        K: KeySwitches<SZ, RO>,
+        K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
         D: KeyboardDisplay<Color = BinaryColor>,
         S: SplitConnection,
         T: CountDown<Time = Microseconds<u64>>,
         L: KeyLayout<SZ, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, RO, B, K, D, S, T, L>
+    > Keyboard<'b, SZ, B, K, D, S, T, L>
 {
     pub fn new(
         usb_bus_alloc: &'b UsbBusAllocator<B>,
@@ -180,8 +181,9 @@ impl<
                 *self.split_buf.borrow_mut() = keys;
             }
             Some(SplitMessage::FindReceiver) => {
-                self.split_connection
-                    .send_message(SplitMessage::<SZ, RO, K::Identifier>::Acknowledge);
+                self.split_connection.send_message(
+                    SplitMessage::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::Acknowledge,
+                );
                 *self.split_state.borrow_mut() = SplitState::Receiver;
             }
             _ => {}
@@ -203,14 +205,14 @@ impl<
     fn split_establish(&self) {
         *self.split_state.borrow_mut() = SplitState::WaitingForReceiver;
         self.split_connection
-            .send_message(SplitMessage::<SZ, RO, K::Identifier>::FindReceiver);
+            .send_message(SplitMessage::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::FindReceiver);
         *self.split_state.borrow_mut() = match self.split_read_message() {
             Some(SplitMessage::Acknowledge) => SplitState::Controller,
             _ => SplitState::Undetermined,
         };
     }
 
-    fn split_read_message(&self) -> Option<SplitMessage<SZ, RO, K::Identifier>> {
+    fn split_read_message(&self) -> Option<SplitMessage<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>> {
         self.split_connection.read_message(
             &mut *self.timer.borrow_mut(),
             Microseconds::<u64>::new(10_000), // timeout in 10ms
