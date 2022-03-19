@@ -1,6 +1,5 @@
 mod keyboard_handedness;
 mod keyboard_report;
-mod keyboard_state;
 use core::cell::RefCell;
 
 use embedded_graphics::{
@@ -23,12 +22,11 @@ use crate::{
     display::KeyboardDisplay,
     key_switches::KeySwitches,
     layout::KeyLayout,
-    split::{SplitConnection, SplitConnectionExt, SplitMessage},
+    split::{SplitConnection, SplitConnectionExt, SplitMessage, SplitState},
 };
 
 pub use keyboard_handedness::KeyboardHandedness;
 use keyboard_report::KeyboardReport;
-use keyboard_state::KeyboardState;
 
 pub(crate) const NUM_ROLLOVER: usize = 6;
 
@@ -48,7 +46,7 @@ pub struct Keyboard<
     key_switches: K,
     display: RefCell<D>,
     split_connection: S,
-    split_state: RefCell<KeyboardState>,
+    split_state: RefCell<SplitState>,
     self_buf: RefCell<Vec<K::Identifier, RO>>,
     split_buf: RefCell<Vec<K::Identifier, RO>>,
     timer: RefCell<T>,
@@ -88,7 +86,7 @@ impl<
             key_switches,
             display: RefCell::new(display),
             split_connection,
-            split_state: RefCell::new(KeyboardState::Undetermined),
+            split_state: RefCell::new(SplitState::Undetermined),
             self_buf: RefCell::new(Vec::new()),
             split_buf: RefCell::new(Vec::new()),
             timer: RefCell::new(timer),
@@ -151,10 +149,10 @@ impl<
 
         // display "Receiver" or "Controller"
         let state = match *self.split_state.borrow() {
-            KeyboardState::Undetermined => "Undetermined",
-            KeyboardState::WaitingForReceiver => "Waiting",
-            KeyboardState::Controller => "Controller",
-            KeyboardState::Receiver => "Receiver",
+            SplitState::Undetermined => "Undetermined",
+            SplitState::WaitingForReceiver => "Waiting",
+            SplitState::Controller => "Controller",
+            SplitState::Receiver => "Receiver",
         };
         Text::new(state, Point::new(0, 22), char_style)
             .draw(&mut *display)
@@ -184,7 +182,7 @@ impl<
             Some(SplitMessage::FindReceiver) => {
                 self.split_connection
                     .send_message(SplitMessage::<SZ, RO, K::Identifier>::Acknowledge);
-                *self.split_state.borrow_mut() = KeyboardState::Receiver;
+                *self.split_state.borrow_mut() = SplitState::Receiver;
             }
             _ => {}
         }
@@ -203,12 +201,12 @@ impl<
     }
 
     fn split_establish(&self) {
-        *self.split_state.borrow_mut() = KeyboardState::WaitingForReceiver;
+        *self.split_state.borrow_mut() = SplitState::WaitingForReceiver;
         self.split_connection
             .send_message(SplitMessage::<SZ, RO, K::Identifier>::FindReceiver);
         *self.split_state.borrow_mut() = match self.split_read_message() {
-            Some(SplitMessage::Acknowledge) => KeyboardState::Controller,
-            _ => KeyboardState::Undetermined,
+            Some(SplitMessage::Acknowledge) => SplitState::Controller,
+            _ => SplitState::Undetermined,
         };
     }
 
@@ -220,10 +218,10 @@ impl<
     }
 
     fn is_controller(&self) -> bool {
-        *self.split_state.borrow() == KeyboardState::Controller
+        *self.split_state.borrow() == SplitState::Controller
     }
 
     fn is_split_undetermined(&self) -> bool {
-        *self.split_state.borrow() == KeyboardState::Undetermined
+        *self.split_state.borrow() == SplitState::Undetermined
     }
 }
