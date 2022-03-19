@@ -1,12 +1,12 @@
 use embedded_graphics::{draw_target::DrawTarget, prelude::*, primitives::Rectangle};
-use rustkbd_core::display::KeyboardDisplay;
+use rustkbd_core::display::Display;
 use ssd1306::{mode::BufferedGraphicsMode, prelude::*, size::DisplaySize, Ssd1306};
 
 pub struct Ssd1306Display<DI: WriteOnlyDataCommand, SIZE: DisplaySize>(
     pub Ssd1306<DI, SIZE, BufferedGraphicsMode<SIZE>>,
 );
 
-impl<DI: WriteOnlyDataCommand, SIZE: DisplaySize> KeyboardDisplay for Ssd1306Display<DI, SIZE> {
+impl<DI: WriteOnlyDataCommand, SIZE: DisplaySize> Display for Ssd1306Display<DI, SIZE> {
     const REQUIRES_FLUSH: bool = true;
 
     fn flush(&mut self) -> Result<(), Self::Error> {

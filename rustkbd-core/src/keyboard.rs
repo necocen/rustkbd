@@ -20,9 +20,9 @@ use usb_device::{
 use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
 
 use crate::{
-    display::KeyboardDisplay,
+    display::Display,
     layout::Layout,
-    split::{SplitConnection, SplitConnectionExt, SplitMessage, SplitState},
+    split::{Connection, ConnectionExt, Message, SplitState},
 };
 
 use hid_report::HidKeyboardReport;
@@ -40,8 +40,8 @@ pub struct Keyboard<
     const SZ: usize,
     B: UsbBus,
     K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-    D: KeyboardDisplay<Color = BinaryColor>,
-    S: SplitConnection,
+    D: Display<Color = BinaryColor>,
+    S: Connection,
     T: CountDown<Time = Microseconds<u64>>,
     L: Layout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
 > {
@@ -62,8 +62,8 @@ impl<
         const SZ: usize,
         B: UsbBus,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-        D: KeyboardDisplay<Color = BinaryColor>,
-        S: SplitConnection,
+        D: Display<Color = BinaryColor>,
+        S: Connection,
         T: CountDown<Time = Microseconds<u64>>,
         L: Layout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
     > Keyboard<'b, SZ, B, K, D, S, T, L>
@@ -119,7 +119,7 @@ impl<
 
         if self.is_controller() {
             self.split_write_keys();
-            if let Some(SplitMessage::KeyInputReply(keys)) = self.split_read_message() {
+            if let Some(Message::KeyInputReply(keys)) = self.split_read_message() {
                 // replied
                 *self.split_buf.borrow_mut() = keys;
             }
@@ -178,18 +178,17 @@ impl<
 
     pub fn split_poll(&self) {
         match self.split_read_message() {
-            Some(SplitMessage::KeyInput(keys)) => {
+            Some(Message::KeyInput(keys)) => {
                 *self.split_buf.borrow_mut() = keys;
                 self.split_write_keys_reply();
             }
-            Some(SplitMessage::KeyInputReply(keys)) => {
+            Some(Message::KeyInputReply(keys)) => {
                 // 通常ここには来ないがタイミングの問題で来る場合があるので適切にハンドリングする
                 *self.split_buf.borrow_mut() = keys;
             }
-            Some(SplitMessage::FindReceiver) => {
-                self.split_connection.send_message(
-                    SplitMessage::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::Acknowledge,
-                );
+            Some(Message::FindReceiver) => {
+                self.split_connection
+                    .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::Acknowledge);
                 *self.split_state.borrow_mut() = SplitState::Receiver;
             }
             _ => {}
@@ -198,27 +197,26 @@ impl<
 
     fn split_write_keys(&self) {
         let keys = self.self_buf.borrow().clone();
-        self.split_connection
-            .send_message(SplitMessage::KeyInput(keys));
+        self.split_connection.send_message(Message::KeyInput(keys));
     }
 
     fn split_write_keys_reply(&self) {
         let keys = self.self_buf.borrow().clone();
         self.split_connection
-            .send_message(SplitMessage::KeyInputReply(keys));
+            .send_message(Message::KeyInputReply(keys));
     }
 
     fn split_establish(&self) {
         *self.split_state.borrow_mut() = SplitState::WaitingForReceiver;
         self.split_connection
-            .send_message(SplitMessage::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::FindReceiver);
+            .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::FindReceiver);
         *self.split_state.borrow_mut() = match self.split_read_message() {
-            Some(SplitMessage::Acknowledge) => SplitState::Controller,
+            Some(Message::Acknowledge) => SplitState::Controller,
             _ => SplitState::Undetermined,
         };
     }
 
-    fn split_read_message(&self) -> Option<SplitMessage<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>> {
+    fn split_read_message(&self) -> Option<Message<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>> {
         self.split_connection.read_message(
             &mut *self.timer.borrow_mut(),
             Microseconds::<u64>::new(10_000), // timeout in 10ms

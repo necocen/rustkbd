@@ -1,7 +1,7 @@
-mod split_connection;
-mod split_message;
+mod connection;
+mod message;
 mod split_state;
-pub use split_connection::SplitConnection;
-pub(crate) use split_connection::SplitConnectionExt;
-pub(crate) use split_message::SplitMessage;
+pub use connection::Connection;
+pub(crate) use connection::ConnectionExt;
+pub(crate) use message::Message;
 pub(crate) use split_state::SplitState;
