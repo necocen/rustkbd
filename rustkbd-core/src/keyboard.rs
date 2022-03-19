@@ -1,3 +1,4 @@
+mod device_info;
 mod hid_report;
 use core::cell::RefCell;
 
@@ -25,6 +26,8 @@ use crate::{
 };
 
 use hid_report::HidKeyboardReport;
+
+pub use device_info::DeviceInfo;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
@@ -66,6 +69,7 @@ impl<
 {
     pub fn new(
         usb_bus_alloc: &'b UsbBusAllocator<B>,
+        device_info: DeviceInfo,
         key_switches: K,
         display: D,
         split_connection: S,
@@ -73,12 +77,15 @@ impl<
         layout: L,
     ) -> Self {
         let usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
-        let usb_device = UsbDeviceBuilder::new(usb_bus_alloc, UsbVidPid(0xfeed, 0x802f))
-            .manufacturer("necocen")
-            .product("necoboard")
-            .serial_number("17")
-            .device_class(0)
-            .build();
+        let usb_device = UsbDeviceBuilder::new(
+            usb_bus_alloc,
+            UsbVidPid(device_info.vendor_id, device_info.product_id),
+        )
+        .manufacturer(device_info.manufacturer)
+        .product(device_info.product_name)
+        .serial_number(device_info.serial_number)
+        .device_class(0)
+        .build();
         Keyboard {
             usb_hid: RefCell::new(usb_hid),
             usb_device: RefCell::new(usb_device),

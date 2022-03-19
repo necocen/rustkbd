@@ -27,7 +27,7 @@ use rp_pico::{
     },
     pac::{self, interrupt, SPI0, UART0},
 };
-use rustkbd_core::keyboard::Keyboard;
+use rustkbd_core::keyboard::{DeviceInfo, Keyboard};
 use rustkbd_rp_pico::{
     split_key_matrix::SplitKeyMatrix, split_layout::SplitLayout, ssd1306_display::Ssd1306Display,
     uart_connection::UartConnection,
@@ -134,8 +134,16 @@ fn main() -> ! {
         pins.gpio22.into_pull_up_input().is_low().unwrap(),
     );
     let layout = SplitLayout::default();
+    let device_info = DeviceInfo {
+        manufacturer: "necocen",
+        vendor_id: 0x0c0d,
+        product_id: 0x802f,
+        product_name: "necoboard petit",
+        serial_number: "17",
+    };
     let keyboard = Keyboard::new(
         USB_BUS.as_ref().unwrap(),
+        device_info,
         key_matrix,
         display,
         connection,
