@@ -1,7 +1,9 @@
-use crate::keyboard::KeySwitchIdentifier;
+use heapless::Vec;
+
+use crate::keyboard::{Key, KeySwitchIdentifier};
 
 pub trait Layout<const SZ: usize, const RO: usize> {
     type Identifier: KeySwitchIdentifier<SZ>;
 
-    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; RO];
+    fn keys(&self, switches: &[Self::Identifier]) -> Vec<Key, RO>;
 }

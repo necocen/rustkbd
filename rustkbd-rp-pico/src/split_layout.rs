@@ -1,4 +1,5 @@
-use rustkbd_core::layout::Layout;
+use heapless::Vec;
+use rustkbd_core::{keyboard::Key, layout::Layout};
 
 use crate::split_switch_identifier::SplitKeySwitchIdentifier;
 
@@ -7,15 +8,20 @@ use crate::split_switch_identifier::SplitKeySwitchIdentifier;
 pub struct SplitLayout {}
 
 impl SplitLayout {
-    const KEY_CODES_LEFT: [[u8; 2]; 2] = [[0x1e, 0x1f], [0x20, 0x21]];
-    const KEY_CODES_RIGHT: [[u8; 2]; 2] = [[0x22, 0x23], [0x24, 0x25]];
+    const KEY_CODES_LEFT: [[Key; 2]; 2] = [
+        [Key::Digit1_Exclamation, Key::Digit2_At],
+        [Key::Digit3_Number, Key::Digit4_Dollar],
+    ];
+    const KEY_CODES_RIGHT: [[Key; 2]; 2] = [
+        [Key::Digit5_Percent, Key::Digit6_Circumflex],
+        [Key::Digit7_Ampersand, Key::LeftShift],
+    ];
 }
 
 impl Layout<3, 6> for SplitLayout {
     type Identifier = SplitKeySwitchIdentifier;
 
-    fn key_codes(&self, switches: &[Self::Identifier]) -> [u8; 6] {
-        let mut keys = [0u8; 6];
+    fn keys(&self, switches: &[Self::Identifier]) -> Vec<Key, 6> {
         switches
             .iter()
             .map(|switch| match *switch {
@@ -27,8 +33,6 @@ impl Layout<3, 6> for SplitLayout {
                 }
             })
             .take(6)
-            .enumerate()
-            .for_each(|(i, key)| keys[i] = key);
-        keys
+            .collect()
     }
 }

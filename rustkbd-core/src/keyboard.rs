@@ -1,5 +1,6 @@
 mod device_info;
 mod hid_report;
+mod key;
 mod key_switches;
 use core::cell::RefCell;
 
@@ -28,6 +29,7 @@ use crate::{
 use hid_report::HidKeyboardReport;
 
 pub use device_info::DeviceInfo;
+pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
@@ -126,30 +128,24 @@ impl<
         }
         let self_side = self.self_buf.borrow();
         let other_side = self.split_buf.borrow();
-        let keys = self_side
+        let switches = self_side
             .iter()
             .chain(other_side.iter())
             .take(NUM_ROLLOVER)
             .copied()
             .map(From::from)
             .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
-        let key_codes = self.layout.key_codes(&keys);
+        let keys = self.layout.keys(&switches);
         if self.is_controller() {
-            let report = HidKeyboardReport {
-                modifier: 0,
-                reserved: 0,
-                key_codes,
-            };
+            let report = self.keyboard_report(&keys);
             self.usb_hid.borrow().push_input(&report).ok();
         }
 
         // print pressed keys
         let mut string = String::<NUM_ROLLOVER>::new();
-        for key in key_codes.iter() {
-            if *key != 0 {
-                string.push((key - 0x1e + b'1') as char).ok();
-            }
-        }
+        keys.into_iter().map(From::from).for_each(|c| {
+            string.push(c).ok();
+        });
         Text::new(string.as_str(), Point::new(0, 10), char_style)
             .draw(&mut *display)
             .ok();
@@ -229,5 +225,24 @@ impl<
 
     fn is_split_undetermined(&self) -> bool {
         *self.split_state.borrow() == SplitState::Undetermined
+    }
+
+    fn keyboard_report(&self, keys: &[Key]) -> HidKeyboardReport {
+        let modifier = keys
+            .iter()
+            .map(|key| key.modifier_key_flag())
+            .fold(0x00_u8, |acc, flg| acc | flg);
+        let mut key_codes = [0u8; 6];
+        keys.iter()
+            .filter(|key| !key.is_modifier_key())
+            .map(|key| *key as u8)
+            .take(6)
+            .enumerate()
+            .for_each(|(i, c)| key_codes[i] = c);
+        HidKeyboardReport {
+            modifier,
+            reserved: 0,
+            key_codes,
+        }
     }
 }
