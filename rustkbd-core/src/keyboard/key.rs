@@ -1,9 +1,9 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
+#[repr(u16)]
 #[allow(non_camel_case_types, dead_code)]
 pub enum Key {
     // FIXME: We need shorter notation.
-    A = 0x04,
+    A = 0x0004,
     B,
     C,
     D,
@@ -164,7 +164,7 @@ pub enum Key {
     Clear_Again,
     CrSel_Props,
     ExSel,
-    LeftControl = 0xe0,
+    LeftControl = 0x00e0,
     LeftShift,
     LeftAlt,
     LeftGui, // Win key(Windows), Command key(Mac), Meta key
@@ -172,18 +172,46 @@ pub enum Key {
     RightShift,
     RightAlt,
     RightGui, // Win key(Windows), Command key(Mac), Meta key
+    MediaZero = 0x1000,
+    MediaPlay = 0x10B0,
+    MediaPause = 0x10B1,
+    MediaRecord = 0x10B2,
+    MediaNextTrack = 0x10B5,
+    MediaPrevTrack = 0x10B6,
+    MediaStop = 0x10B7,
+    MediaRandomPlay = 0x10B9,
+    MediaRepeat = 0x10BC,
+    MediaPlayPause = 0x10CD,
+    MediaVolumeIncrement = 0x10E9,
+    MediaVolumeDecrement = 0x10EA,
 }
 
 impl Key {
     pub fn is_modifier_key(&self) -> bool {
-        (*self as u8) >= 0xe0
+        (*self as u16) >= 0x00e0 && (*self as u16) <= 0x00e7
+    }
+
+    pub fn is_keyboard_key(&self) -> bool {
+        (*self as u16) < 0x1000
+    }
+
+    pub fn is_media_key(&self) -> bool {
+        (*self as u16) >= 0x1000 && (*self as u16) < 0x2000
     }
 
     pub(crate) fn modifier_key_flag(&self) -> u8 {
         if self.is_modifier_key() {
-            1 << ((*self as u8) - 0xe0)
+            1 << ((*self as u16) - 0x00e0)
         } else {
             0x00
+        }
+    }
+
+    pub(crate) fn media_usage_id(&self) -> u16 {
+        if self.is_media_key() {
+            (*self as u16) & 0x0fff
+        } else {
+            0x0000
         }
     }
 }
@@ -192,7 +220,7 @@ impl From<Key> for char {
     fn from(key: Key) -> Self {
         static CHARS: &[u8] = (r##"abcdefghijklmnopqrstuvwxyz1234567890REBT -=[]\#;'`,./ FFFFFFFFFFFF              /*-+R1234567890.\  =FFFFFFFFFFFF                 ,=IIIIIIIIILLLLLLLLLB    E      "##).as_bytes();
         match key as u8 {
-            0x04..=0xa4 => CHARS[(key as usize) - 0x04] as char,
+            0x0004..=0x00a4 => CHARS[(key as usize) - 0x0004] as char,
             _ => ' ',
         }
     }

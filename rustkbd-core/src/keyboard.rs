@@ -18,7 +18,10 @@ use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
     device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
 };
-use usbd_hid::{descriptor::SerializedDescriptor, hid_class::HIDClass};
+use usbd_hid::{
+    descriptor::{MediaKeyboardReport, SerializedDescriptor},
+    hid_class::HIDClass,
+};
 
 use crate::{
     display::Display,
@@ -48,7 +51,8 @@ pub struct Keyboard<
     L: Layout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
-    usb_hid: RefCell<HIDClass<'b, B>>,
+    keyboard_usb_hid: RefCell<HIDClass<'b, B>>,
+    media_usb_hid: RefCell<HIDClass<'b, B>>,
     key_switches: K,
     display: RefCell<D>,
     split_connection: S,
@@ -79,7 +83,8 @@ impl<
         timer: T,
         layout: L,
     ) -> Self {
-        let usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
+        let keyboard_usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
+        let media_usb_hid = HIDClass::new(usb_bus_alloc, MediaKeyboardReport::desc(), 10);
         let usb_device = UsbDeviceBuilder::new(
             usb_bus_alloc,
             UsbVidPid(device_info.vendor_id, device_info.product_id),
@@ -90,7 +95,8 @@ impl<
         .device_class(0)
         .build();
         Keyboard {
-            usb_hid: RefCell::new(usb_hid),
+            keyboard_usb_hid: RefCell::new(keyboard_usb_hid),
+            media_usb_hid: RefCell::new(media_usb_hid),
             usb_device: RefCell::new(usb_device),
             key_switches,
             display: RefCell::new(display),
@@ -137,15 +143,27 @@ impl<
             .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
         let keys = self.layout.keys(&switches);
         if self.is_controller() {
-            let report = self.keyboard_report(&keys);
-            self.usb_hid.borrow().push_input(&report).ok();
+            let keyboard_keys = keys
+                .iter()
+                .filter(|key| key.is_keyboard_key())
+                .cloned()
+                .collect::<Vec<Key, NUM_ROLLOVER>>();
+            let report = self.keyboard_report(&keyboard_keys);
+            self.keyboard_usb_hid.borrow().push_input(&report).ok();
+
+            let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
+            let report = self.media_report(media_key);
+            self.media_usb_hid.borrow().push_input(&report).ok();
         }
 
         // print pressed keys
         let mut string = String::<NUM_ROLLOVER>::new();
-        keys.into_iter().map(From::from).for_each(|c| {
-            string.push(c).ok();
-        });
+        keys.into_iter()
+            .filter(|key| key.is_keyboard_key() && !key.is_modifier_key())
+            .map(From::from)
+            .for_each(|c| {
+                string.push(c).ok();
+            });
         Text::new(string.as_str(), Point::new(0, 10), char_style)
             .draw(&mut *display)
             .ok();
@@ -167,9 +185,10 @@ impl<
     }
 
     pub fn usb_poll(&self) {
-        self.usb_device
-            .borrow_mut()
-            .poll(&mut [&mut *self.usb_hid.borrow_mut()]);
+        self.usb_device.borrow_mut().poll(&mut [
+            &mut *self.keyboard_usb_hid.borrow_mut(),
+            &mut *self.media_usb_hid.borrow_mut(),
+        ]);
     }
 
     pub fn split_poll(&self) {
@@ -243,6 +262,12 @@ impl<
             modifier,
             reserved: 0,
             key_codes,
+        }
+    }
+
+    fn media_report(&self, key: Option<Key>) -> MediaKeyboardReport {
+        MediaKeyboardReport {
+            usage_id: key.map(|key| key.media_usage_id()).unwrap_or(0),
         }
     }
 }
