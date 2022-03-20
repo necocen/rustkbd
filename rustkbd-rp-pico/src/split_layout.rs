@@ -1,4 +1,3 @@
-use heapless::Vec;
 use rustkbd_core::{keyboard::Key, layout::Layout};
 
 use crate::split_switch_identifier::SplitKeySwitchIdentifier;
@@ -18,21 +17,18 @@ impl SplitLayout {
     ];
 }
 
-impl Layout<3, 6> for SplitLayout {
+impl Layout<3> for SplitLayout {
     type Identifier = SplitKeySwitchIdentifier;
 
-    fn keys(&self, switches: &[Self::Identifier]) -> Vec<Key, 6> {
-        switches
-            .iter()
-            .map(|switch| match *switch {
-                SplitKeySwitchIdentifier::Left(col, row) => {
-                    Self::KEY_CODES_LEFT[col as usize][row as usize]
-                }
-                SplitKeySwitchIdentifier::Right(col, row) => {
-                    Self::KEY_CODES_RIGHT[col as usize][row as usize]
-                }
-            })
-            .take(6)
-            .collect()
+    fn key(&self, switch: Self::Identifier) -> Option<Key> {
+        let key = match switch {
+            SplitKeySwitchIdentifier::Left(col, row) => {
+                Self::KEY_CODES_LEFT[col as usize][row as usize]
+            }
+            SplitKeySwitchIdentifier::Right(col, row) => {
+                Self::KEY_CODES_RIGHT[col as usize][row as usize]
+            }
+        };
+        Some(key)
     }
 }

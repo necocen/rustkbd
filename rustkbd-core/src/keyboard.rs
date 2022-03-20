@@ -48,7 +48,7 @@ pub struct Keyboard<
     D: Display<Color = BinaryColor>,
     S: Connection,
     T: CountDown<Time = Microseconds<u64>>,
-    L: Layout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
+    L: Layout<SZ, Identifier = K::Identifier>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
     keyboard_usb_hid: RefCell<HIDClass<'b, B>>,
@@ -71,7 +71,7 @@ impl<
         D: Display<Color = BinaryColor>,
         S: Connection,
         T: CountDown<Time = Microseconds<u64>>,
-        L: Layout<SZ, NUM_ROLLOVER, Identifier = K::Identifier>,
+        L: Layout<SZ, Identifier = K::Identifier>,
     > Keyboard<'b, SZ, B, K, D, S, T, L>
 {
     pub fn new(
@@ -134,14 +134,14 @@ impl<
         }
         let self_side = self.self_buf.borrow();
         let other_side = self.split_buf.borrow();
-        let switches = self_side
+        let keys = self_side
             .iter()
             .chain(other_side.iter())
-            .take(NUM_ROLLOVER)
             .copied()
             .map(From::from)
-            .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
-        let keys = self.layout.keys(&switches);
+            .filter_map(|switch| self.layout.key(switch))
+            .take(NUM_ROLLOVER)
+            .collect::<Vec<Key, NUM_ROLLOVER>>();
         if self.is_controller() {
             let keyboard_keys = keys
                 .iter()

@@ -3,6 +3,7 @@
 #[allow(non_camel_case_types, dead_code)]
 pub enum Key {
     // FIXME: We need shorter notation.
+    None = 0x0000,
     A = 0x0004,
     B,
     C,
@@ -192,7 +193,7 @@ impl Key {
     }
 
     pub fn is_keyboard_key(&self) -> bool {
-        (*self as u16) < 0x1000
+        *self as u16 >= 0x0004 && (*self as u16) < 0x1000
     }
 
     pub fn is_media_key(&self) -> bool {
