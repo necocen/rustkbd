@@ -6,6 +6,6 @@ pub trait KeySwitches<const SZ: usize, const RO: usize> {
 }
 
 pub trait KeySwitchIdentifier<const SZ: usize>:
-    Copy + Sized + Eq + From<[u8; SZ]> + Into<[u8; SZ]>
+    Copy + Eq + From<[u8; SZ]> + Into<[u8; SZ]>
 {
 }
