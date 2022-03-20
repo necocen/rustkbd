@@ -2,6 +2,7 @@ mod device_info;
 mod hid_report;
 mod key;
 mod key_switches;
+mod layer;
 use core::cell::RefCell;
 
 use embedded_graphics::{
@@ -34,6 +35,7 @@ use hid_report::HidKeyboardReport;
 pub use device_info::DeviceInfo;
 pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
+pub use layer::Layer;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
@@ -48,7 +50,8 @@ pub struct Keyboard<
     D: Display<Color = BinaryColor>,
     S: Connection,
     T: CountDown<Time = Microseconds<u64>>,
-    L: Layout<SZ, Identifier = K::Identifier>,
+    Y: Layer,
+    L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
     keyboard_usb_hid: RefCell<HIDClass<'b, B>>,
@@ -60,6 +63,7 @@ pub struct Keyboard<
     self_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
     split_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
     timer: RefCell<T>,
+    layer: RefCell<Y>,
     layout: L,
 }
 
@@ -71,8 +75,9 @@ impl<
         D: Display<Color = BinaryColor>,
         S: Connection,
         T: CountDown<Time = Microseconds<u64>>,
-        L: Layout<SZ, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, B, K, D, S, T, L>
+        Y: Layer,
+        L: Layout<SZ, Y, Identifier = K::Identifier>,
+    > Keyboard<'b, SZ, B, K, D, S, T, Y, L>
 {
     pub fn new(
         usb_bus_alloc: &'b UsbBusAllocator<B>,
@@ -105,6 +110,7 @@ impl<
             self_buf: RefCell::new(Vec::new()),
             split_buf: RefCell::new(Vec::new()),
             timer: RefCell::new(timer),
+            layer: RefCell::new(Y::default()),
             layout,
         }
     }
@@ -134,14 +140,15 @@ impl<
         }
         let self_side = self.self_buf.borrow();
         let other_side = self.split_buf.borrow();
-        let keys = self_side
+        let switches = self_side
             .iter()
             .chain(other_side.iter())
-            .copied()
-            .map(From::from)
-            .filter_map(|switch| self.layout.key(switch))
             .take(NUM_ROLLOVER)
-            .collect::<Vec<Key, NUM_ROLLOVER>>();
+            .copied()
+            .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
+        *self.layer.borrow_mut() = self.layout.layer(&switches);
+        let keys = self.get_keys(&switches);
+
         if self.is_controller() {
             let keyboard_keys = keys
                 .iter()
@@ -244,6 +251,34 @@ impl<
 
     fn is_split_undetermined(&self) -> bool {
         *self.split_state.borrow() == SplitState::Undetermined
+    }
+
+    fn get_keys(&self, switches: &[K::Identifier]) -> Vec<Key, NUM_ROLLOVER> {
+        let current_layer = *self.layer.borrow();
+        switches
+            .iter()
+            .copied()
+            .map(From::from)
+            .map(|switch| {
+                let mut layer = current_layer;
+                let mut key = self.layout.key(layer, switch);
+                while key == Key::Transparent {
+                    if let Some(below) = layer.below() {
+                        assert!(
+                            layer != below,
+                            "{}.below() does not change layer",
+                            stringify!(Y)
+                        );
+                        layer = below;
+                        key = self.layout.key(layer, switch);
+                    } else {
+                        break;
+                    }
+                }
+                key
+            })
+            .filter(|key| !key.is_noop())
+            .collect::<Vec<Key, NUM_ROLLOVER>>()
     }
 
     fn keyboard_report(&self, keys: &[Key]) -> HidKeyboardReport {

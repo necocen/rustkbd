@@ -4,6 +4,7 @@
 pub enum Key {
     // FIXME: We need shorter notation.
     None = 0x0000,
+    Transparent,
     A = 0x0004,
     B,
     C,
@@ -188,6 +189,10 @@ pub enum Key {
 }
 
 impl Key {
+    pub fn is_noop(&self) -> bool {
+        *self as u16 <= 0x0001
+    }
+
     pub fn is_modifier_key(&self) -> bool {
         (*self as u16) >= 0x00e0 && (*self as u16) <= 0x00e7
     }

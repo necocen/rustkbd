@@ -29,7 +29,9 @@ use rp_pico::{
 };
 use rustkbd_core::keyboard::{DeviceInfo, Keyboard};
 use rustkbd_rp_pico::{
-    split_key_matrix::SplitKeyMatrix, split_layout::SplitLayout, ssd1306_display::Ssd1306Display,
+    split_key_matrix::SplitKeyMatrix,
+    split_layout::{Layer, SplitLayout},
+    ssd1306_display::Ssd1306Display,
     uart_connection::UartConnection,
 };
 use ssd1306::{
@@ -53,6 +55,7 @@ type KeyboardType = Keyboard<
     >,
     UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
     CountDown<'static>,
+    Layer,
     SplitLayout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
