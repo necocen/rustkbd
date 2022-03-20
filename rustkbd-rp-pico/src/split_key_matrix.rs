@@ -10,14 +10,14 @@ use rustkbd_core::keyboard::KeySwitches;
 
 use crate::split_switch_identifier::SplitKeySwitchIdentifier;
 
-pub struct SplitKeyMatrix<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> {
+pub struct SplitKeyMatrix<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> {
     inputs: [DynPin; ROWS],
     outputs: RefCell<[DynPin; COLS]>,
     delay: RefCell<D>,
     is_left: bool,
 }
 
-impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> SplitKeyMatrix<D, COLS, ROWS> {
+impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> SplitKeyMatrix<D, ROWS, COLS> {
     pub fn new(
         mut inputs: [DynPin; ROWS],
         mut outputs: [DynPin; COLS],
@@ -40,8 +40,8 @@ impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> SplitKeyMatrix<D, CO
     }
 }
 
-impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches<3, 12>
-    for SplitKeyMatrix<D, COLS, ROWS>
+impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> KeySwitches<3, 12>
+    for SplitKeyMatrix<D, ROWS, COLS>
 {
     type Identifier = SplitKeySwitchIdentifier;
 
@@ -54,10 +54,10 @@ impl<D: DelayUs<u16>, const COLS: usize, const ROWS: usize> KeySwitches<3, 12>
             for j in 0..ROWS {
                 if self.inputs[j].is_high().unwrap() {
                     if self.is_left {
-                        keys.push(SplitKeySwitchIdentifier::Left(i as u8, j as u8))
+                        keys.push(SplitKeySwitchIdentifier::Left(j as u8, i as u8))
                             .ok();
                     } else {
-                        keys.push(SplitKeySwitchIdentifier::Right(i as u8, j as u8))
+                        keys.push(SplitKeySwitchIdentifier::Right(j as u8, i as u8))
                             .ok();
                     }
                 }
