@@ -25,29 +25,6 @@ pub trait Connection {
         }
         Ok(())
     }
-
-    fn read_with_timeout<C: CountDown>(
-        &self,
-        buffer: &mut [u8],
-        timer: &mut C,
-        timeout: impl Into<C::Time>,
-    ) -> Result<(), Error<Self::Error>> {
-        timer.start(timeout);
-        let mut offset = 0;
-        while offset != buffer.len() {
-            if timer.wait().is_ok() {
-                return Err(Error::ReadTimedOut);
-            }
-            offset += match self.read_raw(&mut buffer[offset..]) {
-                Ok(bytes_read) => bytes_read,
-                Err(e) => match e {
-                    nb::Error::Other(_) => return Ok(()), // TODO: return Err
-                    nb::Error::WouldBlock => continue,
-                },
-            }
-        }
-        Ok(())
-    }
 }
 
 /// 一度に書き込む最大バイト数
@@ -132,6 +109,28 @@ pub trait ConnectionExt: Connection {
                 self.write(&[0xff]);
             }
         }
+    }
+    fn read_with_timeout<C: CountDown>(
+        &self,
+        buffer: &mut [u8],
+        timer: &mut C,
+        timeout: impl Into<C::Time>,
+    ) -> Result<(), Error<Self::Error>> {
+        timer.start(timeout);
+        let mut offset = 0;
+        while offset != buffer.len() {
+            if timer.wait().is_ok() {
+                return Err(Error::ReadTimedOut);
+            }
+            offset += match self.read_raw(&mut buffer[offset..]) {
+                Ok(bytes_read) => bytes_read,
+                Err(e) => match e {
+                    nb::Error::Other(_) => return Ok(()), // TODO: return Err
+                    nb::Error::WouldBlock => continue,
+                },
+            }
+        }
+        Ok(())
     }
 }
 
