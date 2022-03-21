@@ -9,8 +9,8 @@ pub enum SplitKeySwitchIdentifier {
 impl From<[u8; 3]> for SplitKeySwitchIdentifier {
     fn from(value: [u8; 3]) -> Self {
         match (value[0], value[1], value[2]) {
-            (0, c, r) => SplitKeySwitchIdentifier::Left(c, r),
-            (1, c, r) => SplitKeySwitchIdentifier::Right(c, r),
+            (0, r, c) => SplitKeySwitchIdentifier::Left(r, c),
+            (1, r, c) => SplitKeySwitchIdentifier::Right(r, c),
             _ => panic!("unexpected switch data"), // TODO: TryFromにすべきか
         }
     }
@@ -19,8 +19,8 @@ impl From<[u8; 3]> for SplitKeySwitchIdentifier {
 impl From<SplitKeySwitchIdentifier> for [u8; 3] {
     fn from(value: SplitKeySwitchIdentifier) -> Self {
         match value {
-            SplitKeySwitchIdentifier::Left(c, r) => [0, c, r],
-            SplitKeySwitchIdentifier::Right(c, r) => [1, c, r],
+            SplitKeySwitchIdentifier::Left(r, c) => [0, r, c],
+            SplitKeySwitchIdentifier::Right(r, c) => [1, r, c],
         }
     }
 }
