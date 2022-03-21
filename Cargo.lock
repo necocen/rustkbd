@@ -351,6 +351,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "546c37ac5d9e56f55e73b677106873d9d9f5190605e41a856503623648488cae"
 
 [[package]]
+name = "necoboard-petit"
+version = "0.0.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt",
+ "defmt-rtt",
+ "display-interface",
+ "embedded-graphics",
+ "embedded-hal",
+ "embedded-time",
+ "heapless",
+ "nb 1.0.0",
+ "panic-halt",
+ "rp-pico",
+ "rustkbd-core",
+ "ssd1306",
+ "usb-device",
+]
+
+[[package]]
 name = "num"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -619,27 +640,6 @@ dependencies = [
  "usb-device",
  "usbd-hid",
  "usbd-hid-macros",
-]
-
-[[package]]
-name = "rustkbd-rp-pico"
-version = "0.0.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "defmt",
- "defmt-rtt",
- "display-interface",
- "embedded-graphics",
- "embedded-hal",
- "embedded-time",
- "heapless",
- "nb 1.0.0",
- "panic-halt",
- "rp-pico",
- "rustkbd-core",
- "ssd1306",
- "usb-device",
 ]
 
 [[package]]

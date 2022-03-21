@@ -39,16 +39,19 @@ use rustkbd_core::{
     keyboard::{DeviceInfo, Key, Keyboard},
     split::SplitState,
 };
-use rustkbd_rp_pico::{
-    split_key_matrix::SplitKeyMatrix,
-    split_layout::{Layer, SplitLayout},
-    uart_connection::UartConnection,
-};
+use split_key_matrix::SplitKeyMatrix;
+use split_layout::{Layer, SplitLayout};
 use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
     Ssd1306,
 };
+use uart_connection::UartConnection;
 use usb_device::class_prelude::UsbBusAllocator;
+
+mod split_key_matrix;
+mod split_layout;
+mod split_switch_identifier;
+mod uart_connection;
 
 type KeyboardType = Keyboard<
     'static,
@@ -115,7 +118,7 @@ fn main() -> ! {
     let connection = UartConnection(uart);
 
     // なぜかここで待たないとディスプレイが点灯しない
-    delay.delay_ms(200);
+    delay.delay_ms(100);
 
     let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
         &mut pac.RESETS,
