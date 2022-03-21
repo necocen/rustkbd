@@ -612,7 +612,6 @@ dependencies = [
 name = "rustkbd-core"
 version = "0.0.0"
 dependencies = [
- "embedded-graphics",
  "embedded-hal",
  "embedded-time",
  "heapless",

@@ -5,16 +5,9 @@ mod key_switches;
 mod layer;
 use core::cell::RefCell;
 
-use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyle},
-    pixelcolor::BinaryColor,
-    prelude::Point,
-    text::Text,
-    Drawable,
-};
 use embedded_hal::timer::CountDown;
 use embedded_time::duration::Microseconds;
-use heapless::{String, Vec};
+use heapless::Vec;
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
     device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
@@ -25,7 +18,6 @@ use usbd_hid::{
 };
 
 use crate::{
-    display::Display,
     layout::Layout,
     split::{Connection, ConnectionExt, Message, SplitState},
 };
@@ -47,7 +39,6 @@ pub struct Keyboard<
     const SZ: usize,
     B: UsbBus,
     K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-    D: Display<Color = BinaryColor>,
     S: Connection,
     T: CountDown<Time = Microseconds<u64>>,
     Y: Layer,
@@ -57,7 +48,6 @@ pub struct Keyboard<
     keyboard_usb_hid: RefCell<HIDClass<'b, B>>,
     media_usb_hid: RefCell<HIDClass<'b, B>>,
     key_switches: K,
-    display: RefCell<D>,
     split_connection: S,
     split_state: RefCell<SplitState>,
     self_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
@@ -65,6 +55,7 @@ pub struct Keyboard<
     timer: RefCell<T>,
     layer: RefCell<Y>,
     layout: L,
+    keys: RefCell<Vec<Key, NUM_ROLLOVER>>,
 }
 
 impl<
@@ -72,18 +63,17 @@ impl<
         const SZ: usize,
         B: UsbBus,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-        D: Display<Color = BinaryColor>,
         S: Connection,
         T: CountDown<Time = Microseconds<u64>>,
         Y: Layer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, B, K, D, S, T, Y, L>
+    > Keyboard<'b, SZ, B, K, S, T, Y, L>
 {
     pub fn new(
         usb_bus_alloc: &'b UsbBusAllocator<B>,
         device_info: DeviceInfo,
         key_switches: K,
-        display: D,
+
         split_connection: S,
         timer: T,
         layout: L,
@@ -104,7 +94,6 @@ impl<
             media_usb_hid: RefCell::new(media_usb_hid),
             usb_device: RefCell::new(usb_device),
             key_switches,
-            display: RefCell::new(display),
             split_connection,
             split_state: RefCell::new(SplitState::Undetermined),
             self_buf: RefCell::new(Vec::new()),
@@ -112,15 +101,11 @@ impl<
             timer: RefCell::new(timer),
             layer: RefCell::new(Y::default()),
             layout,
+            keys: RefCell::new(Vec::new()),
         }
     }
 
     pub fn main_loop(&self) {
-        // setup display
-        let mut display = self.display.borrow_mut();
-        let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
-        display.clear(BinaryColor::Off).ok();
-
         if self.is_split_undetermined()
             && self.usb_device.borrow().state() == UsbDeviceState::Configured
         {
@@ -133,9 +118,9 @@ impl<
 
         if self.is_controller() {
             self.split_write_keys();
-            if let Some(Message::KeyInputReply(keys)) = self.split_read_message() {
+            if let Some(Message::KeyInputReply(switches)) = self.split_read_message() {
                 // replied
-                *self.split_buf.borrow_mut() = keys;
+                *self.split_buf.borrow_mut() = switches;
             }
         }
         let self_side = self.self_buf.borrow();
@@ -147,47 +132,10 @@ impl<
             .copied()
             .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
         *self.layer.borrow_mut() = self.layout.layer(&switches);
-        let keys = self.get_keys(&switches);
+        *self.keys.borrow_mut() = self.keys_by_switches(&switches);
 
         if self.is_controller() {
-            let keyboard_keys = keys
-                .iter()
-                .filter(|key| key.is_keyboard_key())
-                .cloned()
-                .collect::<Vec<Key, NUM_ROLLOVER>>();
-            let report = self.keyboard_report(&keyboard_keys);
-            self.keyboard_usb_hid.borrow().push_input(&report).ok();
-
-            let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
-            let report = self.media_report(media_key);
-            self.media_usb_hid.borrow().push_input(&report).ok();
-        }
-
-        // print pressed keys
-        let mut string = String::<NUM_ROLLOVER>::new();
-        keys.into_iter()
-            .filter(|key| key.is_keyboard_key() && !key.is_modifier_key())
-            .map(From::from)
-            .for_each(|c| {
-                string.push(c).ok();
-            });
-        Text::new(string.as_str(), Point::new(0, 10), char_style)
-            .draw(&mut *display)
-            .ok();
-
-        // display "Receiver" or "Controller"
-        let state = match *self.split_state.borrow() {
-            SplitState::Undetermined => "Undetermined",
-            SplitState::WaitingForReceiver => "Waiting",
-            SplitState::Controller => "Controller",
-            SplitState::Receiver => "Receiver",
-        };
-        Text::new(state, Point::new(0, 22), char_style)
-            .draw(&mut *display)
-            .ok();
-
-        if D::REQUIRES_FLUSH {
-            display.flush().ok();
+            self.send_keys();
         }
     }
 
@@ -215,6 +163,18 @@ impl<
             }
             _ => {}
         }
+    }
+
+    pub fn layer(&self) -> Y {
+        *self.layer.borrow()
+    }
+
+    pub fn keys(&self) -> Vec<Key, NUM_ROLLOVER> {
+        self.keys.borrow().clone()
+    }
+
+    pub fn split_state(&self) -> SplitState {
+        *self.split_state.borrow()
     }
 
     fn split_write_keys(&self) {
@@ -253,7 +213,7 @@ impl<
         *self.split_state.borrow() == SplitState::Undetermined
     }
 
-    fn get_keys(&self, switches: &[K::Identifier]) -> Vec<Key, NUM_ROLLOVER> {
+    fn keys_by_switches(&self, switches: &[K::Identifier]) -> Vec<Key, NUM_ROLLOVER> {
         let current_layer = *self.layer.borrow();
         switches
             .iter()
@@ -304,5 +264,20 @@ impl<
         MediaKeyboardReport {
             usage_id: key.map(|key| key.media_usage_id()).unwrap_or(0),
         }
+    }
+
+    fn send_keys(&self) {
+        let keys = self.keys.borrow();
+        let keyboard_keys = keys
+            .iter()
+            .filter(|key| key.is_keyboard_key())
+            .cloned()
+            .collect::<Vec<Key, NUM_ROLLOVER>>();
+        let report = self.keyboard_report(&keyboard_keys);
+        self.keyboard_usb_hid.borrow().push_input(&report).ok();
+
+        let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
+        let report = self.media_report(media_key);
+        self.media_usb_hid.borrow().push_input(&report).ok();
     }
 }
