@@ -125,7 +125,7 @@ pub trait ConnectionExt: Connection {
             offset += match self.read_raw(&mut buffer[offset..]) {
                 Ok(bytes_read) => bytes_read,
                 Err(e) => match e {
-                    nb::Error::Other(_) => return Ok(()), // TODO: return Err
+                    nb::Error::Other(source) => return Err(Error::ReadError { source }),
                     nb::Error::WouldBlock => continue,
                 },
             }
