@@ -14,3 +14,4 @@ usb-device = "0.2.8"
 usbd-hid-macros = "0.5.2"
 nb = "1.0.0"
 embedded-time = "0.12.1"
+snafu = { version = "0.7.0", default-features = false }

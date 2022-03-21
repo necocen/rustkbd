@@ -2,26 +2,28 @@ use embedded_hal::timer::CountDown;
 use heapless::Vec;
 use nb;
 
-use crate::keyboard::KeySwitchIdentifier;
+use crate::{keyboard::KeySwitchIdentifier, split::Error};
 
 use super::message::Message;
 
 pub trait Connection {
-    fn read_raw(&self, buffer: &mut [u8]) -> nb::Result<usize, ()>;
+    type Error: 'static + snafu::Error;
+    fn read_raw(&self, buffer: &mut [u8]) -> nb::Result<usize, Self::Error>;
 
     fn write(&self, data: &[u8]);
 
-    fn read(&self, buffer: &mut [u8]) {
+    fn read(&self, buffer: &mut [u8]) -> Result<(), Self::Error> {
         let mut offset = 0;
         while offset != buffer.len() {
             offset += match self.read_raw(&mut buffer[offset..]) {
                 Ok(bytes_read) => bytes_read,
                 Err(e) => match e {
-                    nb::Error::Other(_) => return, // TODO: return Err
+                    nb::Error::Other(source) => return Err(source),
                     nb::Error::WouldBlock => continue,
                 },
             }
         }
+        Ok(())
     }
 
     fn read_with_timeout<C: CountDown>(
@@ -29,22 +31,22 @@ pub trait Connection {
         buffer: &mut [u8],
         timer: &mut C,
         timeout: impl Into<C::Time>,
-    ) -> bool {
+    ) -> Result<(), Error<Self::Error>> {
         timer.start(timeout);
         let mut offset = 0;
         while offset != buffer.len() {
             if timer.wait().is_ok() {
-                return false;
+                return Err(Error::ReadTimedOut);
             }
             offset += match self.read_raw(&mut buffer[offset..]) {
                 Ok(bytes_read) => bytes_read,
                 Err(e) => match e {
-                    nb::Error::Other(_) => return false, // TODO: return Err
+                    nb::Error::Other(_) => return Ok(()), // TODO: return Err
                     nb::Error::WouldBlock => continue,
                 },
             }
         }
-        true
+        Ok(())
     }
 }
 
@@ -56,16 +58,13 @@ pub trait ConnectionExt: Connection {
         &self,
         timer: &mut C,
         timeout: impl Into<C::Time>,
-    ) -> Option<Message<SZ, RO, SI>> {
+    ) -> Result<Message<SZ, RO, SI>, Error<Self::Error>> {
         assert!(
             MAX_BUF_LEN > SZ * RO,
             "MAX_BUF_LEN must be large enough to read SI bytes x RO keys"
         );
         let mut buf = [0u8; MAX_BUF_LEN];
-        let result = self.read_with_timeout(&mut buf[..1], timer, timeout);
-        if !result {
-            return None;
-        }
+        self.read_with_timeout(&mut buf[..1], timer, timeout)?;
         let head = buf[0];
         match head {
             0x00 | 0x01 => {
@@ -74,14 +73,16 @@ pub trait ConnectionExt: Connection {
                 } else {
                     Message::KeyInputReply
                 };
-                self.read(&mut buf[..1]);
+                self.read(&mut buf[..1])
+                    .map_err(|source| Error::ReadError { source })?;
                 let len = buf[0] as usize;
                 if len == 0 {
-                    Some(ctor(Vec::new()))
+                    Ok(ctor(Vec::new()))
                 } else if len > RO {
-                    None // TODO: エラー
+                    Err(Error::ReadBufferOverflow)
                 } else {
-                    self.read(&mut buf[..(len * SZ)]);
+                    self.read(&mut buf[..(len * SZ)])
+                        .map_err(|source| Error::ReadError { source })?;
                     let keys = (0..len)
                         .map(|x| x * SZ)
                         .map(|x| {
@@ -90,12 +91,12 @@ pub trait ConnectionExt: Connection {
                             b.into()
                         })
                         .collect();
-                    Some(ctor(keys))
+                    Ok(ctor(keys))
                 }
             }
-            0xff => Some(Message::FindReceiver),
-            0xfe => Some(Message::Acknowledge),
-            _ => None, // TODO: エラーにすべき？
+            0xff => Ok(Message::FindReceiver),
+            0xfe => Ok(Message::Acknowledge),
+            _ => Err(Error::UnknownMessage { head }),
         }
     }
 

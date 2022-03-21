@@ -208,7 +208,6 @@ fn draw_state(
     // display "Receiver" or "Controller"
     let state = match split {
         SplitState::Undetermined => "Undetermined",
-        SplitState::WaitingForReceiver => "Waiting",
         SplitState::Controller => "Controller",
         SplitState::Receiver => "Receiver",
     };

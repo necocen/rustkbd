@@ -11,6 +11,7 @@ use heapless::Vec;
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
     device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
+    UsbError,
 };
 use usbd_hid::{
     descriptor::{MediaKeyboardReport, SerializedDescriptor},
@@ -19,7 +20,7 @@ use usbd_hid::{
 
 use crate::{
     layout::Layout,
-    split::{Connection, ConnectionExt, Message, SplitState},
+    split::{Connection, ConnectionExt, Error as SplitError, Message, SplitState},
 };
 
 use hid_report::HidKeyboardReport;
@@ -109,7 +110,7 @@ impl<
         if self.is_split_undetermined()
             && self.usb_device.borrow().state() == UsbDeviceState::Configured
         {
-            self.split_establish();
+            self.split_establish().ok();
         }
 
         // scan key matrix
@@ -118,7 +119,7 @@ impl<
 
         if self.is_controller() {
             self.split_write_keys();
-            if let Some(Message::KeyInputReply(switches)) = self.split_read_message() {
+            if let Ok(Message::KeyInputReply(switches)) = self.split_read_message() {
                 // replied
                 *self.split_buf.borrow_mut() = switches;
             }
@@ -135,7 +136,7 @@ impl<
         *self.keys.borrow_mut() = self.keys_by_switches(&switches);
 
         if self.is_controller() {
-            self.send_keys();
+            self.send_keys().ok();
         }
     }
 
@@ -148,15 +149,15 @@ impl<
 
     pub fn split_poll(&self) {
         match self.split_read_message() {
-            Some(Message::KeyInput(keys)) => {
+            Ok(Message::KeyInput(keys)) => {
                 *self.split_buf.borrow_mut() = keys;
                 self.split_write_keys_reply();
             }
-            Some(Message::KeyInputReply(keys)) => {
+            Ok(Message::KeyInputReply(keys)) => {
                 // 通常ここには来ないがタイミングの問題で来る場合があるので適切にハンドリングする
                 *self.split_buf.borrow_mut() = keys;
             }
-            Some(Message::FindReceiver) => {
+            Ok(Message::FindReceiver) => {
                 self.split_connection
                     .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::Acknowledge);
                 *self.split_state.borrow_mut() = SplitState::Receiver;
@@ -188,17 +189,20 @@ impl<
             .send_message(Message::KeyInputReply(keys));
     }
 
-    fn split_establish(&self) {
-        *self.split_state.borrow_mut() = SplitState::WaitingForReceiver;
+    fn split_establish(&self) -> Result<(), SplitError<S::Error>> {
+        *self.split_state.borrow_mut() = SplitState::Undetermined;
         self.split_connection
             .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::FindReceiver);
-        *self.split_state.borrow_mut() = match self.split_read_message() {
-            Some(Message::Acknowledge) => SplitState::Controller,
+        *self.split_state.borrow_mut() = match self.split_read_message()? {
+            Message::Acknowledge => SplitState::Controller,
             _ => SplitState::Undetermined,
         };
+        Ok(())
     }
 
-    fn split_read_message(&self) -> Option<Message<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>> {
+    fn split_read_message(
+        &self,
+    ) -> Result<Message<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>, SplitError<S::Error>> {
         self.split_connection.read_message(
             &mut *self.timer.borrow_mut(),
             Microseconds::<u64>::new(10_000), // timeout in 10ms
@@ -266,7 +270,7 @@ impl<
         }
     }
 
-    fn send_keys(&self) {
+    fn send_keys(&self) -> Result<(), UsbError> {
         let keys = self.keys.borrow();
         let keyboard_keys = keys
             .iter()
@@ -274,10 +278,11 @@ impl<
             .cloned()
             .collect::<Vec<Key, NUM_ROLLOVER>>();
         let report = self.keyboard_report(&keyboard_keys);
-        self.keyboard_usb_hid.borrow().push_input(&report).ok();
+        self.keyboard_usb_hid.borrow().push_input(&report)?;
 
         let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
         let report = self.media_report(media_key);
-        self.media_usb_hid.borrow().push_input(&report).ok();
+        self.media_usb_hid.borrow().push_input(&report)?;
+        Ok(())
     }
 }

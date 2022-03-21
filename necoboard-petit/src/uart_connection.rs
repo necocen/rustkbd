@@ -1,19 +1,40 @@
-use nb::{Error, Result};
-use rp_pico::hal::uart::{Enabled, UartDevice, UartPeripheral, ValidUartPinout};
+use core::fmt::Display;
+
+use rp_pico::hal::uart::{Enabled, ReadErrorType, UartDevice, UartPeripheral, ValidUartPinout};
 use rustkbd_core::split::Connection;
 
 pub struct UartConnection<D: UartDevice, P: ValidUartPinout<D>>(pub UartPeripheral<Enabled, D, P>);
 
 impl<D: UartDevice, P: ValidUartPinout<D>> Connection for UartConnection<D, P> {
-    fn read_raw(&self, buffer: &mut [u8]) -> Result<usize, ()> {
-        self.0.read_raw(buffer).map_err(|_| Error::Other(()))
+    fn read_raw(&self, buffer: &mut [u8]) -> nb::Result<usize, ReadError> {
+        self.0
+            .read_raw(buffer)
+            .map_err(|e| e.map(|e| ReadError(e.err_type)))
     }
 
     fn write(&self, data: &[u8]) {
         self.0.write_full_blocking(data);
     }
 
-    fn read(&self, buffer: &mut [u8]) {
-        self.0.read_full_blocking(buffer).ok();
+    fn read(&self, buffer: &mut [u8]) -> Result<(), ReadError> {
+        self.0.read_full_blocking(buffer).map_err(ReadError)
+    }
+
+    type Error = ReadError;
+}
+
+#[derive(Debug)]
+pub struct ReadError(pub ReadErrorType);
+
+impl Display for ReadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.0 {
+            ReadErrorType::Overrun => f.write_str("ReadError: Overrun"),
+            ReadErrorType::Break => f.write_str("ReadError: Break"),
+            ReadErrorType::Parity => f.write_str("ReadError: Parity"),
+            ReadErrorType::Framing => f.write_str("ReadError: Framing"),
+        }
     }
 }
+
+impl snafu::Error for ReadError {}
