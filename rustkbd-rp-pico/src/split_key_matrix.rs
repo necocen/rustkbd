@@ -54,11 +54,17 @@ impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> KeySwitches<3, 12>
             for j in 0..ROWS {
                 if self.inputs[j].is_high().unwrap() {
                     if self.is_left {
-                        keys.push(SplitKeySwitchIdentifier::Left(j as u8, i as u8))
-                            .ok();
+                        keys.push(SplitKeySwitchIdentifier::Left {
+                            row: j as u8,
+                            col: i as u8,
+                        })
+                        .ok();
                     } else {
-                        keys.push(SplitKeySwitchIdentifier::Right(j as u8, i as u8))
-                            .ok();
+                        keys.push(SplitKeySwitchIdentifier::Right {
+                            row: j as u8,
+                            col: i as u8,
+                        })
+                        .ok();
                     }
                 }
             }
