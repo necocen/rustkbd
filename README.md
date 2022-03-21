@@ -7,6 +7,7 @@ Abstraction layer for handling USB HID communication and left-right communicatio
 
 ### necoboard-petit
 Firmware implementation for 8 key split keyboard using RasPi-pico.
+![necoboard-petit](imgs/necoboard-petit.jpeg)
 
 ## Features
 
