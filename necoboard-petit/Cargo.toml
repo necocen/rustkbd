@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-panic-halt = "0.2.0"
 rustkbd-core = { path = "../rustkbd-core" }
 ssd1306 = "0.7.0"
 embedded-graphics = "0.7.1"
@@ -23,3 +22,4 @@ usb-device = "0.2.8"
 display-interface = "0.4.1"
 nb = "1.0.0"
 snafu = { version = "0.7.0", default-features = false }
+panic-probe = { version = "0.3.0", features = ["print-defmt"] }

@@ -7,7 +7,7 @@ use crate::{keyboard::KeySwitchIdentifier, split::Error};
 use super::message::Message;
 
 pub trait Connection {
-    type Error: 'static + snafu::Error;
+    type Error: 'static + snafu::Error + defmt::Format;
     fn read_raw(&self, buffer: &mut [u8]) -> nb::Result<usize, Self::Error>;
 
     fn write(&self, data: &[u8]);

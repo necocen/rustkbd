@@ -1,12 +1,11 @@
-cargo-features = ["strip"]
-
 [workspace]
 members = ["necoboard-petit", "rustkbd-core"]
 
 [profile.dev]
 panic = "abort"
+debug = 1
 
 [profile.release]
 panic = "abort"
-strip = "symbols"  # Automatically strip symbols from the binary.
 lto = true
+debug = 1

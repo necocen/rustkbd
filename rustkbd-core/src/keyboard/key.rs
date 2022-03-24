@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use defmt::Format;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
 #[repr(u16)]
 #[allow(non_camel_case_types, dead_code)]
 pub enum Key {

@@ -5,6 +5,7 @@ mod key_switches;
 mod layer;
 use core::cell::RefCell;
 
+use defmt::Format;
 use embedded_hal::timer::CountDown;
 use embedded_time::duration::Microseconds;
 use heapless::Vec;
@@ -110,7 +111,9 @@ impl<
         if self.is_split_undetermined()
             && self.usb_device.borrow().state() == UsbDeviceState::Configured
         {
-            self.split_establish().ok();
+            if let Err(e) = self.split_establish() {
+                defmt::warn!("Split establish error: {}", e);
+            }
         }
 
         // scan key matrix
@@ -133,10 +136,16 @@ impl<
             .copied()
             .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
         *self.layer.borrow_mut() = self.layout.layer(&switches);
-        *self.keys.borrow_mut() = self.keys_by_switches(&switches);
+        let keys = self.keys_by_switches(&switches);
+        if !keys.is_empty() {
+            defmt::debug!("{}", keys.as_slice());
+        }
+        *self.keys.borrow_mut() = keys;
 
         if self.is_controller() {
-            self.send_keys().ok();
+            if let Err(e) = self.send_keys() {
+                defmt::warn!("UsbError: {}", UsbErrorDisplay(e));
+            }
         }
     }
 
@@ -194,8 +203,14 @@ impl<
         self.split_connection
             .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::FindReceiver);
         *self.split_state.borrow_mut() = match self.split_read_message()? {
-            Message::Acknowledge => SplitState::Controller,
-            _ => SplitState::Undetermined,
+            Message::Acknowledge => {
+                defmt::info!("Split connection established");
+                SplitState::Controller
+            }
+            _ => {
+                defmt::warn!("Unexpected response");
+                SplitState::Undetermined
+            }
         };
         Ok(())
     }
@@ -284,5 +299,14 @@ impl<
         let report = self.media_report(media_key);
         self.media_usb_hid.borrow().push_input(&report)?;
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct UsbErrorDisplay(pub UsbError);
+
+impl Format for UsbErrorDisplay {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "{}", defmt::Debug2Format(&self.0));
     }
 }

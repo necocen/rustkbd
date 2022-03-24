@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-extern crate panic_halt;
 
 use core::cell::RefCell;
 
@@ -9,6 +8,7 @@ use cortex_m::{
     interrupt::Mutex,
 };
 use cortex_m_rt::entry;
+use defmt_rtt as _;
 use embedded_graphics::{
     draw_target::DrawTarget,
     mono_font::{ascii::FONT_6X10, MonoTextStyle},
@@ -20,6 +20,7 @@ use embedded_graphics::{
 use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
 use heapless::{String, Vec};
+use panic_probe as _;
 use rp_pico::{
     hal::{
         self,
@@ -70,6 +71,8 @@ fn main() -> ! {
     // These variables must be static due to lifetime constraints
     static mut TIMER: Option<Timer> = None;
     static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
+
+    defmt::info!("Launching necoboard-petit");
 
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();

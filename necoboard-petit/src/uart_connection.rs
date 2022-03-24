@@ -37,4 +37,15 @@ impl Display for ReadError {
     }
 }
 
+impl defmt::Format for ReadError {
+    fn format(&self, fmt: defmt::Formatter) {
+        match self.0 {
+            ReadErrorType::Overrun => defmt::write!(fmt, "ReadError: Overrun"),
+            ReadErrorType::Break => defmt::write!(fmt, "ReadError: Break"),
+            ReadErrorType::Parity => defmt::write!(fmt, "ReadError: Parity"),
+            ReadErrorType::Framing => defmt::write!(fmt, "ReadError: Framing"),
+        }
+    }
+}
+
 impl snafu::Error for ReadError {}
