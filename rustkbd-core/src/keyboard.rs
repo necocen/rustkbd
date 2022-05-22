@@ -21,7 +21,7 @@ use usbd_hid::{
 
 use crate::{
     layout::Layout,
-    split::{Connection, ConnectionExt, Error as SplitError, Message, SplitState},
+    split::{Connection, ConnectionExt, DummyConnection, Error as SplitError, Message, SplitState},
 };
 
 use hid_report::HidKeyboardReport;
@@ -65,13 +65,58 @@ impl<
         const SZ: usize,
         B: UsbBus,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
+        T: CountDown<Time = Microseconds<u64>>,
+        Y: Layer,
+        L: Layout<SZ, Y, Identifier = K::Identifier>,
+    > Keyboard<'b, SZ, B, K, DummyConnection, T, Y, L>
+{
+    pub fn new(
+        usb_bus_alloc: &'b UsbBusAllocator<B>,
+        device_info: DeviceInfo,
+        key_switches: K,
+        timer: T,
+        layout: L,
+    ) -> Self {
+        let keyboard_usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
+        let media_usb_hid = HIDClass::new(usb_bus_alloc, MediaKeyboardReport::desc(), 10);
+        let usb_device = UsbDeviceBuilder::new(
+            usb_bus_alloc,
+            UsbVidPid(device_info.vendor_id, device_info.product_id),
+        )
+        .manufacturer(device_info.manufacturer)
+        .product(device_info.product_name)
+        .serial_number(device_info.serial_number)
+        .device_class(0)
+        .build();
+        Keyboard {
+            keyboard_usb_hid: RefCell::new(keyboard_usb_hid),
+            media_usb_hid: RefCell::new(media_usb_hid),
+            usb_device: RefCell::new(usb_device),
+            key_switches,
+            split_connection: DummyConnection::default(),
+            split_state: RefCell::new(SplitState::NotAvailable),
+            self_buf: RefCell::new(Vec::new()),
+            split_buf: RefCell::new(Vec::new()),
+            timer: RefCell::new(timer),
+            layer: RefCell::new(Y::default()),
+            layout,
+            keys: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl<
+        'b,
+        const SZ: usize,
+        B: UsbBus,
+        K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
         S: Connection,
         T: CountDown<Time = Microseconds<u64>>,
         Y: Layer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
     > Keyboard<'b, SZ, B, K, S, T, Y, L>
 {
-    pub fn new(
+    pub fn new_split(
         usb_bus_alloc: &'b UsbBusAllocator<B>,
         device_info: DeviceInfo,
         key_switches: K,
@@ -141,7 +186,7 @@ impl<
         }
         *self.keys.borrow_mut() = keys;
 
-        if self.is_controller() {
+        if self.is_controller() || self.is_not_splitted() {
             if let Err(e) = self.send_keys() {
                 defmt::warn!("UsbError: {}", UsbErrorDisplay(e));
             }
@@ -224,11 +269,15 @@ impl<
     }
 
     fn is_controller(&self) -> bool {
-        *self.split_state.borrow() == SplitState::Controller
+        self.split_state() == SplitState::Controller
     }
 
     fn is_split_undetermined(&self) -> bool {
-        *self.split_state.borrow() == SplitState::Undetermined
+        self.split_state() == SplitState::Undetermined
+    }
+
+    fn is_not_splitted(&self) -> bool {
+        self.split_state() == SplitState::NotAvailable
     }
 
     fn keys_by_switches(&self, switches: &[K::Identifier]) -> Vec<Key, NUM_ROLLOVER> {

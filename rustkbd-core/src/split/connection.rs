@@ -135,3 +135,32 @@ pub trait ConnectionExt: Connection {
 }
 
 impl<T: Connection> ConnectionExt for T {}
+
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct DummyConnection;
+
+impl Connection for DummyConnection {
+    type Error = DummyConnectionError;
+
+    fn read_raw(&self, _buffer: &mut [u8]) -> nb::Result<usize, Self::Error> {
+        Ok(0)
+    }
+
+    fn write(&self, _data: &[u8]) {}
+}
+
+#[derive(Debug)]
+pub struct DummyConnectionError;
+
+impl core::fmt::Display for DummyConnectionError {
+    fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Ok(())
+    }
+}
+
+impl defmt::Format for DummyConnectionError {
+    fn format(&self, _fmt: defmt::Formatter) {}
+}
+
+impl snafu::Error for DummyConnectionError {}

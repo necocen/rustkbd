@@ -154,7 +154,7 @@ fn main() -> ! {
         product_name: "necoboard petit",
         serial_number: "17",
     };
-    let keyboard = Keyboard::new(
+    let keyboard = Keyboard::new_split(
         USB_BUS.as_ref().unwrap(),
         device_info,
         key_matrix,
@@ -211,6 +211,7 @@ fn draw_state(
     // display "Receiver" or "Controller"
     let state = match split {
         SplitState::Undetermined => "Undetermined",
+        SplitState::NotAvailable => "N/A",
         SplitState::Controller => "Controller",
         SplitState::Receiver => "Receiver",
     };
