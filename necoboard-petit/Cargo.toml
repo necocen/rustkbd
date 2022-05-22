@@ -9,7 +9,7 @@ edition = "2021"
 rustkbd-core = { path = "../rustkbd-core" }
 ssd1306 = "0.7.0"
 embedded-graphics = "0.7.1"
-heapless = "0.7.10"
+heapless = "0.7.13"
 rp-pico = "0.3.0"
 rp2040-hal = { version = "0.4.0", features = ["eh1_0_alpha"] }
 cortex-m = "0.7.4"
@@ -21,5 +21,5 @@ defmt-rtt = "0.3.2"
 usb-device = "0.2.8"
 display-interface = "0.4.1"
 nb = "1.0.0"
-snafu = { version = "0.7.0", default-features = false }
+snafu = { version = "0.7.1", default-features = false }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
