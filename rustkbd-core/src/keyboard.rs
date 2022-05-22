@@ -75,7 +75,6 @@ impl<
         usb_bus_alloc: &'b UsbBusAllocator<B>,
         device_info: DeviceInfo,
         key_switches: K,
-
         split_connection: S,
         timer: T,
         layout: L,
