@@ -186,7 +186,10 @@ impl<
         }
         *self.keys.borrow_mut() = keys;
 
-        if self.is_controller() || self.is_not_splitted() {
+        if self.is_controller()
+            || (self.is_not_splitted()
+                && self.usb_device.borrow().state() == UsbDeviceState::Configured)
+        {
             if let Err(e) = self.send_keys() {
                 defmt::warn!("UsbError: {}", UsbErrorDisplay(e));
             }
