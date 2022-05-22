@@ -1,5 +1,5 @@
 [workspace]
-members = ["necoboard-petit", "rustkbd-core"]
+members = ["necoboard-petit", "necoboard-petit-ec", "rustkbd-core"]
 
 [profile.dev]
 panic = "abort"
