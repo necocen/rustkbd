@@ -16,6 +16,7 @@ pub struct KeyMatrix<
     const CSELS: usize,
     const COLS: usize,
 > {
+    is_left: bool,
     rows: RefCell<[DynPin; ROWS]>,
     mux_selectors: RefCell<[DynPin; CSELS]>,
     mux_enabled: RefCell<DynPin>,
@@ -38,6 +39,7 @@ impl<
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        is_left: bool,
         mut rows: [DynPin; ROWS],
         mut mux_selectors: [DynPin; CSELS],
         mut mux_enabled: DynPin,
@@ -60,6 +62,7 @@ impl<
         rst_charge.into_push_pull_output();
         rst_charge.set_high().ok();
         KeyMatrix {
+            is_left,
             rows: RefCell::new(rows),
             mux_selectors: RefCell::new(mux_selectors),
             mux_enabled: RefCell::new(mux_enabled),
@@ -79,7 +82,7 @@ impl<
         const ROWS: usize,
         const CSELS: usize,
         const COLS: usize,
-    > KeySwitches<2, 12> for KeyMatrix<D, P, ROWS, CSELS, COLS>
+    > KeySwitches<3, 12> for KeyMatrix<D, P, ROWS, CSELS, COLS>
 {
     type Identifier = KeySwitchIdentifier;
 
@@ -92,8 +95,6 @@ impl<
         let mut adc = self.adc.borrow_mut();
         let mut adc_pin = self.adc_pin.borrow_mut();
         let mut counter = self.counter.borrow_mut();
-        // FIXME: もっと適切なディレイの入れ方を考えたい
-        delay.delay_us(10000);
 
         // opa_shutdownとmux_enabledは実際はHi/Loが逆
         self.opa_shutdown.borrow_mut().set_high().ok();
@@ -123,11 +124,18 @@ impl<
                 let val: u16 = adc.read(&mut *adc_pin).unwrap_or(0);
                 // TODO: 何らかのフィルタ
                 if val > 30 {
-                    keys.push(KeySwitchIdentifier {
-                        row: row as u8,
-                        col: col as u8,
-                    })
-                    .ok();
+                    let key_identifier = if self.is_left {
+                        KeySwitchIdentifier::Left {
+                            row: row as u8,
+                            col: col as u8,
+                        }
+                    } else {
+                        KeySwitchIdentifier::Right {
+                            row: row as u8,
+                            col: col as u8,
+                        }
+                    };
+                    keys.push(key_identifier).ok();
                 }
 
                 rows[row].set_low().unwrap();
