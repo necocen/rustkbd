@@ -403,6 +403,7 @@ dependencies = [
  "cortex-m-rt",
  "defmt",
  "defmt-rtt",
+ "embedded-graphics",
  "embedded-hal 0.2.7",
  "embedded-time",
  "heapless",
@@ -412,6 +413,7 @@ dependencies = [
  "rp2040-hal",
  "rustkbd-core",
  "snafu",
+ "ssd1306",
  "usb-device",
 ]
 

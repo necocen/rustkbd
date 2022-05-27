@@ -12,16 +12,25 @@ use cortex_m::{
 };
 use cortex_m_rt::entry;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::InputPin;
+use embedded_graphics::{
+    draw_target::DrawTarget,
+    mono_font::{ascii::FONT_6X10, MonoTextStyle},
+    pixelcolor::BinaryColor,
+    prelude::Point,
+    text::Text,
+    Drawable,
+};
+use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
 use hal::{
     gpio::{
         bank0::{Gpio0, Gpio1, Gpio26},
-        FloatingInput, Function, FunctionUart, Pin, Uart,
+        FloatingInput, Function, FunctionSpi, FunctionUart, Pin, Uart,
     },
     uart::{common_configs, UartPeripheral},
-    Adc,
+    Adc, Spi,
 };
+use heapless::{String, Vec};
 use key_matrix::KeyMatrix;
 use layout::{Layer, Layout};
 use panic_probe as _;
@@ -29,7 +38,14 @@ use rp_pico::{
     hal::{self, prelude::*, timer::CountDown, usb::UsbBus, Timer},
     pac::{self, interrupt, UART0},
 };
-use rustkbd_core::keyboard::{DeviceInfo, Keyboard};
+use rustkbd_core::{
+    keyboard::{DeviceInfo, Key, Keyboard},
+    split::SplitState,
+};
+use ssd1306::{
+    mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
+    Ssd1306,
+};
 use usb_device::class_prelude::UsbBusAllocator;
 
 use crate::uart_connection::UartConnection;
@@ -108,6 +124,23 @@ fn main() -> ! {
 
     delay.delay_ms(100);
 
+    let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
+        &mut pac.RESETS,
+        clocks.peripheral_clock.freq(),
+        16_000_000u32.Hz(),
+        &MODE_0,
+    );
+    let _ = pins.gpio6.into_mode::<FunctionSpi>();
+    let _ = pins.gpio7.into_mode::<FunctionSpi>();
+    let interface = SPIInterface::new(
+        spi,
+        pins.gpio4.into_push_pull_output(),
+        pins.gpio5.into_push_pull_output(),
+    );
+    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate90)
+        .into_buffered_graphics_mode();
+    display.init().ok();
+
     let is_left = pins.gpio22.into_pull_up_input().is_low().unwrap();
     let key_matrix = KeyMatrix::new(
         is_left,
@@ -161,6 +194,13 @@ fn main() -> ! {
             let keyboard = KEYBOARD.borrow(cs).borrow();
             let keyboard = keyboard.as_ref().unwrap();
             keyboard.main_loop();
+            draw_state(
+                &mut display,
+                keyboard.layer(),
+                keyboard.keys(),
+                keyboard.split_state(),
+            );
+            display.flush().ok();
         });
     }
 }
@@ -188,4 +228,47 @@ fn UART0_IRQ() {
             .map(Keyboard::split_poll)
     });
     cortex_m::asm::sev();
+}
+
+fn draw_state(
+    display: &mut impl DrawTarget<Color = BinaryColor>,
+    layer: Layer,
+    keys: Vec<Key, 6>,
+    split: SplitState,
+) {
+    let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+    display.clear(BinaryColor::Off).ok();
+
+    // print pressed keys
+    let mut string = String::<6>::new();
+    keys.into_iter()
+        .filter(|key| key.is_keyboard_key() && !key.is_modifier_key())
+        .map(From::from)
+        .for_each(|c| {
+            string.push(c).ok();
+        });
+    Text::new(string.as_str(), Point::new(0, 10), char_style)
+        .draw(display)
+        .ok();
+
+    // display "Receiver" or "Controller"
+    let state = match split {
+        SplitState::Undetermined => "Undetermined",
+        SplitState::NotAvailable => "N/A",
+        SplitState::Controller => "Controller",
+        SplitState::Receiver => "Receiver",
+    };
+    Text::new(state, Point::new(0, 22), char_style)
+        .draw(display)
+        .ok();
+
+    // display Layer
+    let layer = match layer {
+        Layer::Default => "Default",
+        Layer::Lower => "Lower",
+        Layer::Raise => "Raise",
+    };
+    Text::new(layer, Point::new(0, 34), char_style)
+        .draw(display)
+        .ok();
 }
