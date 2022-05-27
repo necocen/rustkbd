@@ -122,6 +122,7 @@ impl<
                 delay.delay_us(5);
 
                 let val: u16 = adc.read(&mut *adc_pin).unwrap_or(0);
+                delay.delay_us(5);
                 // TODO: 何らかのフィルタ
                 if val > 30 {
                     let key_identifier = if self.is_left {
