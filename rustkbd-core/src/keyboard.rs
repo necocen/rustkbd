@@ -29,7 +29,7 @@ use hid_report::HidKeyboardReport;
 pub use device_info::DeviceInfo;
 pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
-pub use layer::Layer;
+pub use layer::KeyboardLayer;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
@@ -43,7 +43,7 @@ pub struct Keyboard<
     K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
     S: Connection,
     T: CountDown<Time = Microseconds<u64>>,
-    Y: Layer,
+    Y: KeyboardLayer,
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
     usb_device: RefCell<UsbDevice<'b, B>>,
@@ -66,7 +66,7 @@ impl<
         B: UsbBus,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
         T: CountDown<Time = Microseconds<u64>>,
-        Y: Layer,
+        Y: KeyboardLayer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
     > Keyboard<'b, SZ, B, K, DummyConnection, T, Y, L>
 {
@@ -112,7 +112,7 @@ impl<
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
         S: Connection,
         T: CountDown<Time = Microseconds<u64>>,
-        Y: Layer,
+        Y: KeyboardLayer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
     > Keyboard<'b, SZ, B, K, S, T, Y, L>
 {
