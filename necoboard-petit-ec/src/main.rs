@@ -59,7 +59,7 @@ type KeyboardType = Keyboard<
     'static,
     3,
     UsbBus,
-    KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 2, 3, 2>,
+    KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 3, 3, 3>,
     UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
     CountDown<'static>,
     Layer,
@@ -144,7 +144,7 @@ fn main() -> ! {
     let is_left = pins.gpio22.into_pull_up_input().is_low().unwrap();
     let key_matrix = KeyMatrix::new(
         is_left,
-        [pins.gpio14.into(), pins.gpio15.into()],
+        [pins.gpio13.into(), pins.gpio14.into(), pins.gpio15.into()],
         [pins.gpio16.into(), pins.gpio17.into(), pins.gpio18.into()],
         pins.gpio19.into(),
         pins.gpio21.into(),
