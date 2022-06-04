@@ -186,6 +186,7 @@ pub enum Key {
     MediaRandomPlay = 0x10B9,
     MediaRepeat = 0x10BC,
     MediaPlayPause = 0x10CD,
+    MediaMute = 0x10E2,
     MediaVolumeIncrement = 0x10E9,
     MediaVolumeDecrement = 0x10EA,
 }
