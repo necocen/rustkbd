@@ -124,7 +124,8 @@ impl<
                 let val: u16 = adc.read(&mut *adc_pin).unwrap_or(0);
                 delay.delay_us(10);
                 // TODO: 何らかのフィルタ
-                if val > 30 {
+                defmt::debug!("{}, {}, {}", row, col, val);
+                if val > 50 {
                     let key_identifier = if self.is_left {
                         KeySwitchIdentifier::Left {
                             row: row as u8,
