@@ -20,14 +20,10 @@ use embedded_graphics::{
     text::Text,
     Drawable,
 };
-use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
+use embedded_hal::spi::MODE_0;
 use embedded_time::rate::*;
 use hal::{
-    gpio::{
-        bank0::{Gpio0, Gpio1, Gpio26},
-        FloatingInput, Function, FunctionSpi, FunctionUart, Pin, Uart,
-    },
-    uart::{common_configs, UartPeripheral},
+    gpio::{bank0::Gpio26, FloatingInput, FunctionSpi, Pin},
     Adc, Spi,
 };
 use heapless::{String, Vec};
@@ -36,19 +32,17 @@ use layout::{Layer, Layout};
 use panic_probe as _;
 use rp_pico::{
     hal::{self, prelude::*, timer::CountDown, usb::UsbBus, Timer},
-    pac::{self, interrupt, UART0},
+    pac::{self, interrupt},
 };
 use rustkbd_core::{
     keyboard::{DeviceInfo, Key, Keyboard},
-    split::SplitState,
+    split::{DummyConnection, SplitState},
 };
 use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
     Ssd1306,
 };
 use usb_device::class_prelude::UsbBusAllocator;
-
-use crate::uart_connection::UartConnection;
 
 mod key_matrix;
 mod layout;
@@ -57,10 +51,10 @@ mod uart_connection;
 
 type KeyboardType = Keyboard<
     'static,
-    3,
+    2,
     UsbBus,
-    KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 3, 3, 3>,
-    UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
+    KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 3, 4>,
+    DummyConnection,
     CountDown<'static>,
     Layer,
     Layout,
@@ -112,16 +106,6 @@ fn main() -> ! {
     ));
     *USB_BUS = Some(usb_bus);
 
-    let uart_pins = (
-        pins.gpio0.into_mode::<FunctionUart>(),
-        pins.gpio1.into_mode::<FunctionUart>(),
-    );
-    let mut uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
-        .enable(common_configs::_9600_8_N_1, clocks.peripheral_clock.freq())
-        .unwrap();
-    uart.enable_rx_interrupt();
-    let connection = UartConnection(uart);
-
     delay.delay_ms(100);
 
     let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
@@ -141,14 +125,17 @@ fn main() -> ! {
         .into_buffered_graphics_mode();
     display.init().ok();
 
-    let is_left = pins.gpio22.into_pull_up_input().is_low().unwrap();
     let key_matrix = KeyMatrix::new(
-        is_left,
-        [pins.gpio13.into(), pins.gpio14.into(), pins.gpio15.into()],
-        [pins.gpio16.into(), pins.gpio17.into(), pins.gpio18.into()],
-        pins.gpio19.into(),
+        [
+            pins.gpio12.into(),
+            pins.gpio13.into(),
+            pins.gpio14.into(),
+            pins.gpio15.into(),
+        ],
+        [pins.gpio20.into(), pins.gpio19.into(), pins.gpio18.into()],
         pins.gpio21.into(),
-        pins.gpio20.into(),
+        pins.gpio27.into(),
+        pins.gpio28.into(),
         adc,
         pins.gpio26.into_floating_input(),
         delay,
@@ -162,11 +149,10 @@ fn main() -> ! {
         serial_number: "17",
     };
 
-    let keyboard = Keyboard::new_split(
+    let keyboard = Keyboard::new(
         USB_BUS.as_ref().unwrap(),
         device_info,
         key_matrix,
-        connection,
         TIMER.as_ref().unwrap().count_down(),
         Layout::default(),
     );

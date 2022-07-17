@@ -16,7 +16,6 @@ pub struct KeyMatrix<
     const CSELS: usize,
     const COLS: usize,
 > {
-    is_left: bool,
     rows: RefCell<[DynPin; ROWS]>,
     mux_selectors: RefCell<[DynPin; CSELS]>,
     mux_enabled: RefCell<DynPin>,
@@ -39,7 +38,6 @@ impl<
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        is_left: bool,
         mut rows: [DynPin; ROWS],
         mut mux_selectors: [DynPin; CSELS],
         mut mux_enabled: DynPin,
@@ -62,7 +60,6 @@ impl<
         rst_charge.into_push_pull_output();
         rst_charge.set_high().ok();
         KeyMatrix {
-            is_left,
             rows: RefCell::new(rows),
             mux_selectors: RefCell::new(mux_selectors),
             mux_enabled: RefCell::new(mux_enabled),
@@ -82,7 +79,7 @@ impl<
         const ROWS: usize,
         const CSELS: usize,
         const COLS: usize,
-    > KeySwitches<3, 12> for KeyMatrix<D, P, ROWS, CSELS, COLS>
+    > KeySwitches<2, 12> for KeyMatrix<D, P, ROWS, CSELS, COLS>
 {
     type Identifier = KeySwitchIdentifier;
 
@@ -126,16 +123,9 @@ impl<
                 // TODO: 何らかのフィルタ
                 defmt::debug!("{}, {}, {}", row, col, val);
                 if val > 50 {
-                    let key_identifier = if self.is_left {
-                        KeySwitchIdentifier::Left {
-                            row: row as u8,
-                            col: col as u8,
-                        }
-                    } else {
-                        KeySwitchIdentifier::Right {
-                            row: row as u8,
-                            col: col as u8,
-                        }
+                    let key_identifier = KeySwitchIdentifier {
+                        row: row as u8,
+                        col: col as u8,
                     };
                     keys.push(key_identifier).ok();
                 }
