@@ -44,6 +44,7 @@ use ssd1306::{
 };
 use usb_device::class_prelude::UsbBusAllocator;
 
+mod filter;
 mod key_matrix;
 mod layout;
 mod switch_identifier;

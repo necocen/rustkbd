@@ -1,4 +1,7 @@
-use core::cell::RefCell;
+use core::{
+    cell::RefCell,
+    mem::{transmute_copy, MaybeUninit},
+};
 
 use cortex_m::prelude::_embedded_hal_adc_OneShot;
 use embedded_hal::{adc::Channel, blocking::delay::DelayUs, digital::v2::OutputPin};
@@ -7,7 +10,7 @@ use rp2040_hal::adc::Adc;
 use rp_pico::hal::gpio::DynPin;
 use rustkbd_core::keyboard::KeySwitches;
 
-use crate::switch_identifier::KeySwitchIdentifier;
+use crate::{filter::Filter, switch_identifier::KeySwitchIdentifier};
 
 pub struct KeyMatrix<
     D: DelayUs<u16>,
@@ -24,6 +27,7 @@ pub struct KeyMatrix<
     adc: RefCell<Adc>,
     adc_pin: RefCell<P>,
     delay: RefCell<D>,
+    filters: [[Filter; COLS]; ROWS],
     /// for debug
     counter: RefCell<u16>,
 }
@@ -59,6 +63,15 @@ impl<
         opa_shutdown.set_low().ok();
         rst_charge.into_push_pull_output();
         rst_charge.set_high().ok();
+
+        let mut filters: [[MaybeUninit<Filter>; COLS]; ROWS] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+        for slot in filters.iter_mut() {
+            for slot in slot.iter_mut() {
+                *slot = MaybeUninit::new(Filter::new());
+            }
+        }
+
         KeyMatrix {
             rows: RefCell::new(rows),
             mux_selectors: RefCell::new(mux_selectors),
@@ -68,6 +81,7 @@ impl<
             adc: RefCell::new(adc),
             adc_pin: RefCell::new(adc_pin),
             delay: RefCell::new(delay),
+            filters: unsafe { transmute_copy::<_, [[Filter; COLS]; ROWS]>(&filters) },
             counter: RefCell::new(0),
         }
     }
@@ -103,6 +117,7 @@ impl<
         if *counter == 1000 {
             *counter = 0;
         }
+
         for col in 0..COLS {
             // マルチプレクサの設定
             self.mux_enabled.borrow_mut().set_high().ok();
@@ -120,9 +135,11 @@ impl<
 
                 let val: u16 = adc.read(&mut *adc_pin).unwrap_or(0);
                 delay.delay_us(10);
-                // TODO: 何らかのフィルタ
-                defmt::debug!("{}, {}, {}", row, col, val);
-                if val > 50 {
+                // if col == 0 && row == 0 {
+                //     defmt::debug!("{}", val);
+                // }
+                let val = self.filters[row][col].predict(val.into());
+                if val > 30.0 {
                     let key_identifier = KeySwitchIdentifier {
                         row: row as u8,
                         col: col as u8,
