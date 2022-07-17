@@ -114,9 +114,9 @@ impl<
 
             for row in 0..ROWS {
                 rst_charge.set_low().ok();
-                delay.delay_us(40);
+                delay.delay_us(100);
                 rows[row].set_high().unwrap();
-                delay.delay_us(5);
+                delay.delay_us(10);
 
                 let val: u16 = adc.read(&mut *adc_pin).unwrap_or(0);
                 delay.delay_us(10);
