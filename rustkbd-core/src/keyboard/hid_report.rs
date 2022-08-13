@@ -10,9 +10,9 @@ use usbd_hid_macros::gen_hid_descriptor;
             #[packed_bits 8] #[item_settings data,variable,absolute] modifier=input;
         };
         (usage_min = 0x00, usage_max = 0xff) = {
-            #[item_settings constant,variable,absolute] reserved=input;
+            #[item_settings constant,array,absolute] reserved=input;
         };
-        (usage_page = KEYBOARD, usage_min = 0x00, usage_max = 0xdd) = {
+        (usage_page = KEYBOARD, usage_min = 0x00, usage_max = 0xff) = {
             #[item_settings data,array,absolute] key_codes=input;
         };
     }

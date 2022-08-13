@@ -229,7 +229,7 @@ fn draw_state(
     // print pressed keys
     let mut string = String::<6>::new();
     keys.into_iter()
-        .filter(|key| key.is_keyboard_key() && !key.is_modifier_key())
+        .filter(|key| key.is_keyboard_key())
         .map(From::from)
         .for_each(|c| {
             string.push(c).ok();

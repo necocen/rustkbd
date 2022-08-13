@@ -189,6 +189,27 @@ pub enum Key {
     MediaMute = 0x10E2,
     MediaVolumeIncrement = 0x10E9,
     MediaVolumeDecrement = 0x10EA,
+    Tilde = 0xe135,
+    Exclamation = 0xe11e,
+    At = 0xe11f,
+    Hash = 0xe120,
+    Dollar = 0xe121,
+    Percent = 0xe122,
+    Circumflex = 0xe123,
+    Ampersand = 0xe124,
+    Asterisk = 0xe125,
+    LeftParenthesis = 0xe126,
+    RightParenthesis = 0xe127,
+    LowLine = 0xe12d,
+    Plus = 0xe12e,
+    LeftCurlyBracket = 0xe12f,
+    RightCurlyBracket = 0xe130,
+    VerticalBar = 0xe131,
+    Colon = 0xe133,
+    Quotation = 0xe134,
+    LessThan = 0xe136,
+    GreaterThan = 0xe137,
+    Question = 0xe138,
 }
 
 impl Key {
@@ -200,8 +221,23 @@ impl Key {
         (*self as u16) >= 0x00e0 && (*self as u16) <= 0x00e7
     }
 
+    pub fn is_modified_key(&self) -> bool {
+        (*self as u16 >> 8) >= 0x00e0
+            && (*self as u16 >> 8) <= 0x00e7
+            && (*self as u16 & 0xff) >= 0x0004
+            && (*self as u16 & 0xff) < 0x00e0
+    }
+
     pub fn is_keyboard_key(&self) -> bool {
-        *self as u16 >= 0x0004 && (*self as u16) < 0x1000
+        *self as u16 >= 0x0004 && (*self as u16) < 0x00e0
+    }
+
+    pub fn key_code(&self) -> Option<u8> {
+        if self.is_modified_key() || self.is_keyboard_key() {
+            Some((*self as u16 & 0xff) as u8)
+        } else {
+            None
+        }
     }
 
     pub fn is_media_key(&self) -> bool {
@@ -211,6 +247,8 @@ impl Key {
     pub(crate) fn modifier_key_flag(&self) -> u8 {
         if self.is_modifier_key() {
             1 << ((*self as u16) - 0x00e0)
+        } else if self.is_modified_key() {
+            1 << ((*self as u16 >> 8) - 0x00e0)
         } else {
             0x00
         }

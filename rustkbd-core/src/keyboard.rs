@@ -318,9 +318,8 @@ impl<
             .fold(0x00_u8, |acc, flg| acc | flg);
         let mut key_codes = [0u8; 6];
         keys.iter()
-            .filter(|key| !key.is_modifier_key())
-            .map(|key| *key as u8)
-            .take(6)
+            .filter_map(|key| key.key_code())
+            .take(NUM_ROLLOVER)
             .enumerate()
             .for_each(|(i, c)| key_codes[i] = c);
         HidKeyboardReport {
@@ -338,12 +337,7 @@ impl<
 
     fn send_keys(&self) -> Result<(), UsbError> {
         let keys = self.keys.borrow();
-        let keyboard_keys = keys
-            .iter()
-            .filter(|key| key.is_keyboard_key())
-            .cloned()
-            .collect::<Vec<Key, NUM_ROLLOVER>>();
-        let report = self.keyboard_report(&keyboard_keys);
+        let report = self.keyboard_report(&keys);
         self.keyboard_usb_hid.borrow().push_input(&report)?;
 
         let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
