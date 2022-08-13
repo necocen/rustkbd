@@ -418,6 +418,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "necoboard-v1"
+version = "0.0.0"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt",
+ "defmt-rtt",
+ "embedded-graphics",
+ "embedded-hal 0.2.7",
+ "embedded-time",
+ "heapless",
+ "nb 1.0.0",
+ "panic-probe",
+ "rp-pico",
+ "rp2040-hal",
+ "rustkbd-core",
+ "snafu",
+ "ssd1306",
+ "usb-device",
+]
+
+[[package]]
 name = "num"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
