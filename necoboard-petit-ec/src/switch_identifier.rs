@@ -1,6 +1,6 @@
 use rustkbd_core::keyboard;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct KeySwitchIdentifier {
     pub row: u8,
     pub col: u8,

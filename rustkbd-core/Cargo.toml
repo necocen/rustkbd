@@ -7,7 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-heapless = "0.7.16"
+heapless = { git = "https://github.com/japaric/heapless", rev = "97ac129ba4344820e9fedb8a0fc7f11d5bf652a6" }
 embedded-hal = "0.2.7"
 usbd-hid = "0.6.0"
 usb-device = "0.2.9"

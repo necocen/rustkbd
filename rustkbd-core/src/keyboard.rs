@@ -8,7 +8,7 @@ use core::cell::RefCell;
 use defmt::Format;
 use embedded_hal::timer::CountDown;
 use embedded_time::duration::Microseconds;
-use heapless::Vec;
+use heapless::{FnvIndexMap, Vec};
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
     device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
@@ -58,6 +58,7 @@ pub struct Keyboard<
     layer: RefCell<Y>,
     layout: L,
     keys: RefCell<Vec<Key, NUM_ROLLOVER>>,
+    pressed_switches: RefCell<FnvIndexMap<K::Identifier, Y, 16>>,
 }
 
 impl<
@@ -101,6 +102,7 @@ impl<
             layer: RefCell::new(Y::default()),
             layout,
             keys: RefCell::new(Vec::new()),
+            pressed_switches: RefCell::new(FnvIndexMap::new()),
         }
     }
 }
@@ -148,6 +150,7 @@ impl<
             layer: RefCell::new(Y::default()),
             layout,
             keys: RefCell::new(Vec::new()),
+            pressed_switches: RefCell::new(FnvIndexMap::new()),
         }
     }
 
@@ -179,8 +182,19 @@ impl<
             .take(NUM_ROLLOVER)
             .copied()
             .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
+
+        // グローバルなレイヤの決定
         *self.layer.borrow_mut() = self.layout.layer(&switches);
-        let keys = self.keys_by_switches(&switches);
+        // 個別のスイッチのレイヤの決定
+        let switches_and_layers = switches
+            .iter()
+            .copied()
+            .map(|s| (s, self.layer_for_switch(&s)))
+            .collect::<Vec<(K::Identifier, Y), NUM_ROLLOVER>>();
+        // スイッチ押下状態の更新
+        self.save_pressed_switches(&switches_and_layers);
+        // キーの決定
+        let keys = self.keys_by_switches_and_layers(&switches_and_layers);
         if !keys.is_empty() {
             defmt::debug!("{}", keys.as_slice());
         }
@@ -283,14 +297,23 @@ impl<
         self.split_state() == SplitState::NotAvailable
     }
 
-    fn keys_by_switches(&self, switches: &[K::Identifier]) -> Vec<Key, NUM_ROLLOVER> {
-        let current_layer = *self.layer.borrow();
-        switches
+    fn layer_for_switch(&self, switch: &K::Identifier) -> Y {
+        let pressed_switches = self.pressed_switches.borrow();
+        if let Some(layer) = pressed_switches.get(switch) {
+            *layer
+        } else {
+            self.layer()
+        }
+    }
+
+    fn keys_by_switches_and_layers(
+        &self,
+        switches_and_layers: &[(K::Identifier, Y)],
+    ) -> Vec<Key, NUM_ROLLOVER> {
+        switches_and_layers
             .iter()
             .copied()
-            .map(From::from)
-            .map(|switch| {
-                let mut layer = current_layer;
+            .map(|(switch, mut layer)| {
                 let mut key = self.layout.key(layer, switch);
                 while key == Key::Transparent {
                     if let Some(below) = layer.below() {
@@ -309,6 +332,11 @@ impl<
             })
             .filter(|key| !key.is_noop())
             .collect::<Vec<Key, NUM_ROLLOVER>>()
+    }
+
+    fn save_pressed_switches(&self, switches_and_layers: &[(K::Identifier, Y)]) {
+        let mut pressed_switches = self.pressed_switches.borrow_mut();
+        *pressed_switches = switches_and_layers.iter().cloned().collect();
     }
 
     fn keyboard_report(&self, keys: &[Key]) -> HidKeyboardReport {

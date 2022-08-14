@@ -1,6 +1,6 @@
 use rustkbd_core::keyboard::KeySwitchIdentifier;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SplitKeySwitchIdentifier {
     Left { row: u8, col: u8 },
     Right { row: u8, col: u8 },
