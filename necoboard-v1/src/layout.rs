@@ -91,7 +91,7 @@ impl Layout {
             Key::Digit8_Asterisk,
             Key::Digit9_LeftParenthesis,
             Key::Digit0_RightParenthesis,
-            Key::Transparent,
+            Key::Tab,
         ],
         [
             Key::Transparent,
