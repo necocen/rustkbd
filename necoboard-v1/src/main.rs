@@ -48,7 +48,6 @@ mod filter;
 mod key_matrix;
 mod layout;
 mod switch_identifier;
-mod uart_connection;
 
 type KeyboardType = Keyboard<
     'static,
