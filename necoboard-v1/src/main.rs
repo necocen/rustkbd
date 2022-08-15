@@ -223,7 +223,16 @@ fn main() -> ! {
         .unwrap();
 
     loop {
-        cortex_m::asm::wfi();
+        cortex_m::interrupt::free(|cs| unsafe {
+            while LOCK.load(Ordering::Relaxed) {
+                core::hint::spin_loop()
+            }
+            LOCK.store(true, Ordering::Relaxed);
+            let keyboard = KEYBOARD.borrow(cs).borrow();
+            let keyboard = keyboard.as_ref().unwrap();
+            keyboard.main_loop();
+            LOCK.store(false, Ordering::Relaxed);
+        });
         watchdog.feed();
     }
 }
@@ -276,8 +285,9 @@ fn TIMER_IRQ_0() {
         alarm.clear_interrupt();
         let keyboard = KEYBOARD.borrow(cs).borrow();
         let keyboard = keyboard.as_ref().unwrap();
-        keyboard.main_loop();
-
+        if let Err(e) = keyboard.send_keys() {
+            defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
+        }
         alarm.schedule(10_000.microseconds()).unwrap();
         alarm.enable_interrupt();
         LOCK.store(false, Ordering::Relaxed);

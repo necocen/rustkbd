@@ -5,7 +5,6 @@ mod key_switches;
 mod layer;
 use core::cell::RefCell;
 
-use defmt::Format;
 use embedded_hal::timer::CountDown;
 use embedded_time::duration::Microseconds;
 use heapless::{FnvIndexMap, Vec};
@@ -199,15 +198,6 @@ impl<
             defmt::debug!("{}", keys.as_slice());
         }
         *self.keys.borrow_mut() = keys;
-
-        if self.is_controller()
-            || (self.is_not_splitted()
-                && self.usb_device.borrow().state() == UsbDeviceState::Configured)
-        {
-            if let Err(e) = self.send_keys() {
-                defmt::warn!("UsbError: {}", UsbErrorDisplay(e));
-            }
-        }
     }
 
     pub fn usb_poll(&self) {
@@ -363,23 +353,19 @@ impl<
         }
     }
 
-    fn send_keys(&self) -> Result<(), UsbError> {
-        let keys = self.keys.borrow();
-        let report = self.keyboard_report(&keys);
-        self.keyboard_usb_hid.borrow().push_input(&report)?;
+    pub fn send_keys(&self) -> Result<(), UsbError> {
+        if self.is_controller()
+            || (self.is_not_splitted()
+                && self.usb_device.borrow().state() == UsbDeviceState::Configured)
+        {
+            let keys = self.keys.borrow();
+            let report = self.keyboard_report(&keys);
+            self.keyboard_usb_hid.borrow().push_input(&report)?;
 
-        let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
-        let report = self.media_report(media_key);
-        self.media_usb_hid.borrow().push_input(&report)?;
+            let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
+            let report = self.media_report(media_key);
+            self.media_usb_hid.borrow().push_input(&report)?;
+        }
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-struct UsbErrorDisplay(pub UsbError);
-
-impl Format for UsbErrorDisplay {
-    fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{}", defmt::Debug2Format(&self.0));
     }
 }

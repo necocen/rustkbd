@@ -181,6 +181,9 @@ fn main() -> ! {
             let keyboard = KEYBOARD.borrow(cs).borrow();
             let keyboard = keyboard.as_ref().unwrap();
             keyboard.main_loop();
+            if let Err(e) = keyboard.send_keys() {
+                defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
+            }
             draw_state(
                 &mut display,
                 keyboard.layer(),
