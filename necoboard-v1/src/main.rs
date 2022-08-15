@@ -22,6 +22,7 @@ use embedded_graphics::{
 };
 use embedded_hal::{
     spi::MODE_0,
+    watchdog::{Watchdog, WatchdogEnable},
 };
 use embedded_time::duration::Extensions;
 use embedded_time::rate::*;
@@ -111,6 +112,8 @@ fn main() -> ! {
         ALARM.borrow(cs).replace(Some(alarm0));
     });
     let adc = Adc::new(pac.ADC, &mut pac.RESETS);
+    watchdog.pause_on_debug(true);
+    watchdog.start(1_000_000.microseconds());
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -221,6 +224,7 @@ fn main() -> ! {
 
     loop {
         cortex_m::asm::wfi();
+        watchdog.feed();
     }
 }
 
