@@ -3,7 +3,7 @@
 
 use core::{
     cell::RefCell,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
 use cortex_m::{
@@ -20,10 +20,15 @@ use embedded_graphics::{
     text::Text,
     Drawable,
 };
-use embedded_hal::spi::MODE_0;
+use embedded_hal::{
+    spi::MODE_0,
+};
+use embedded_time::duration::Extensions;
 use embedded_time::rate::*;
 use hal::{
     gpio::{bank0::Gpio26, FloatingInput, FunctionSpi, Pin},
+    multicore::{Multicore, Stack},
+    timer::Alarm,
     Adc, Spi,
 };
 use heapless::{String, Vec};
@@ -60,6 +65,10 @@ type KeyboardType = Keyboard<
     Layout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
+static mut ALARM: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCell::new(None));
+static mut LOCK: AtomicBool = AtomicBool::new(false);
+
+static mut CORE1_STACK: Stack<4096> = Stack::new();
 
 #[entry]
 fn main() -> ! {
@@ -72,7 +81,7 @@ fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     // The single-cycle I/O block controls our GPIO pins
-    let sio = hal::Sio::new(pac.SIO);
+    let mut sio = hal::Sio::new(pac.SIO);
     let pins = rp_pico::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
@@ -95,6 +104,12 @@ fn main() -> ! {
     .unwrap();
     let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
+    let mut alarm0 = TIMER.as_mut().unwrap().alarm_0().unwrap();
+    alarm0.schedule(10_000.microseconds()).unwrap();
+    alarm0.enable_interrupt();
+    cortex_m::interrupt::free(|cs| unsafe {
+        ALARM.borrow(cs).replace(Some(alarm0));
+    });
     let adc = Adc::new(pac.ADC, &mut pac.RESETS);
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
@@ -105,6 +120,10 @@ fn main() -> ! {
         &mut pac.RESETS,
     ));
     *USB_BUS = Some(usb_bus);
+
+    let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
+    let cores = mc.cores();
+    let core1 = &mut cores[1];
 
     delay.delay_ms(100);
 
@@ -169,6 +188,7 @@ fn main() -> ! {
         // Enable the USB interrupt
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
         pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
+        pac::NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
     }
     // defmt のタイムスタンプを実装します
     // タイマを使えば、起動からの時間を表示したりできます
@@ -180,19 +200,27 @@ fn main() -> ! {
         n
     });
 
-    loop {
-        cortex_m::interrupt::free(|cs| unsafe {
-            let keyboard = KEYBOARD.borrow(cs).borrow();
-            let keyboard = keyboard.as_ref().unwrap();
-            keyboard.main_loop();
-            draw_state(
-                &mut display,
-                keyboard.layer(),
-                keyboard.keys(),
-                keyboard.split_state(),
-            );
+    core1
+        .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
+            let (layer, keys, state) = cortex_m::interrupt::free(|cs| unsafe {
+                while LOCK.load(Ordering::Relaxed) {
+                    core::hint::spin_loop()
+                }
+                LOCK.store(true, Ordering::Relaxed);
+                let keyboard = KEYBOARD.borrow(cs).borrow();
+                let keyboard = keyboard.as_ref().unwrap();
+                let (layer, keys, state) =
+                    (keyboard.layer(), keyboard.keys(), keyboard.split_state());
+                LOCK.store(false, Ordering::Relaxed);
+                (layer, keys, state)
+            });
+            draw_state(&mut display, layer, keys, state);
             display.flush().ok();
-        });
+        })
+        .unwrap();
+
+    loop {
+        cortex_m::asm::wfi();
     }
 }
 
@@ -200,11 +228,16 @@ fn main() -> ! {
 #[interrupt]
 fn USBCTRL_IRQ() {
     cortex_m::interrupt::free(|cs| unsafe {
+        while LOCK.load(Ordering::Relaxed) {
+            core::hint::spin_loop()
+        }
+        LOCK.store(true, Ordering::Relaxed);
         KEYBOARD
             .borrow(cs)
             .borrow()
             .as_ref()
-            .map(Keyboard::usb_poll)
+            .map(Keyboard::usb_poll);
+        LOCK.store(false, Ordering::Relaxed);
     });
 }
 
@@ -212,13 +245,39 @@ fn USBCTRL_IRQ() {
 #[interrupt]
 fn UART0_IRQ() {
     cortex_m::interrupt::free(|cs| unsafe {
+        while LOCK.load(Ordering::Relaxed) {
+            core::hint::spin_loop()
+        }
+        LOCK.store(true, Ordering::Relaxed);
         KEYBOARD
             .borrow(cs)
             .borrow()
             .as_ref()
-            .map(Keyboard::split_poll)
+            .map(Keyboard::split_poll);
+        LOCK.store(false, Ordering::Relaxed);
     });
     cortex_m::asm::sev();
+}
+
+#[allow(non_snake_case)]
+#[interrupt]
+fn TIMER_IRQ_0() {
+    cortex_m::interrupt::free(|cs| unsafe {
+        while LOCK.load(Ordering::Relaxed) {
+            core::hint::spin_loop()
+        }
+        LOCK.store(true, Ordering::Relaxed);
+        let mut alarm = ALARM.borrow(cs).borrow_mut();
+        let alarm = alarm.as_mut().unwrap();
+        alarm.clear_interrupt();
+        let keyboard = KEYBOARD.borrow(cs).borrow();
+        let keyboard = keyboard.as_ref().unwrap();
+        keyboard.main_loop();
+
+        alarm.schedule(10_000.microseconds()).unwrap();
+        alarm.enable_interrupt();
+        LOCK.store(false, Ordering::Relaxed);
+    });
 }
 
 fn draw_state(
