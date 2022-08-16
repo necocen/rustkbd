@@ -10,7 +10,6 @@ use cortex_m::{
     delay::{self, Delay},
     interrupt::Mutex,
 };
-use cortex_m_rt::entry;
 use defmt_rtt as _;
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -37,6 +36,7 @@ use key_matrix::KeyMatrix;
 use layout::{Layer, Layout};
 use panic_probe as _;
 use rp_pico::{
+    entry,
     hal::{self, prelude::*, timer::CountDown, usb::UsbBus, Timer},
     pac::{self, interrupt},
 };
