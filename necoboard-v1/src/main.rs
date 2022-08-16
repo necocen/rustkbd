@@ -3,7 +3,7 @@
 
 use core::{
     cell::RefCell,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 use cortex_m::{
@@ -28,6 +28,7 @@ use embedded_time::rate::*;
 use hal::{
     gpio::{bank0::Gpio26, FloatingInput, FunctionSpi, Pin},
     multicore::{Multicore, Stack},
+    sio::Spinlock0,
     timer::Alarm,
     Adc, Spi,
 };
@@ -67,7 +68,6 @@ type KeyboardType = Keyboard<
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
 static mut ALARM: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCell::new(None));
-static mut LOCK: AtomicBool = AtomicBool::new(false);
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
@@ -205,16 +205,10 @@ fn main() -> ! {
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
             let (layer, keys, state) = cortex_m::interrupt::free(|cs| unsafe {
-                while LOCK.load(Ordering::Relaxed) {
-                    core::hint::spin_loop()
-                }
-                LOCK.store(true, Ordering::Relaxed);
+                let _lock = Spinlock0::claim();
                 let keyboard = KEYBOARD.borrow(cs).borrow();
                 let keyboard = keyboard.as_ref().unwrap();
-                let (layer, keys, state) =
-                    (keyboard.layer(), keyboard.keys(), keyboard.split_state());
-                LOCK.store(false, Ordering::Relaxed);
-                (layer, keys, state)
+                (keyboard.layer(), keyboard.keys(), keyboard.split_state())
             });
             draw_state(&mut display, layer, keys, state);
             display.flush().ok();
@@ -223,14 +217,10 @@ fn main() -> ! {
 
     loop {
         cortex_m::interrupt::free(|cs| unsafe {
-            while LOCK.load(Ordering::Relaxed) {
-                core::hint::spin_loop()
-            }
-            LOCK.store(true, Ordering::Relaxed);
+            let _lock = Spinlock0::claim();
             let keyboard = KEYBOARD.borrow(cs).borrow();
             let keyboard = keyboard.as_ref().unwrap();
             keyboard.main_loop();
-            LOCK.store(false, Ordering::Relaxed);
         });
         watchdog.feed();
     }
@@ -240,16 +230,12 @@ fn main() -> ! {
 #[interrupt]
 fn USBCTRL_IRQ() {
     cortex_m::interrupt::free(|cs| unsafe {
-        while LOCK.load(Ordering::Relaxed) {
-            core::hint::spin_loop()
-        }
-        LOCK.store(true, Ordering::Relaxed);
+        let _lock = Spinlock0::claim();
         KEYBOARD
             .borrow(cs)
             .borrow()
             .as_ref()
             .map(Keyboard::usb_poll);
-        LOCK.store(false, Ordering::Relaxed);
     });
 }
 
@@ -257,10 +243,7 @@ fn USBCTRL_IRQ() {
 #[interrupt]
 fn TIMER_IRQ_0() {
     cortex_m::interrupt::free(|cs| unsafe {
-        while LOCK.load(Ordering::Relaxed) {
-            core::hint::spin_loop()
-        }
-        LOCK.store(true, Ordering::Relaxed);
+        let _lock = Spinlock0::claim();
         let mut alarm = ALARM.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
@@ -271,7 +254,6 @@ fn TIMER_IRQ_0() {
         }
         alarm.schedule(10_000.microseconds()).unwrap();
         alarm.enable_interrupt();
-        LOCK.store(false, Ordering::Relaxed);
     });
 }
 
