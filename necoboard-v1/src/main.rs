@@ -190,7 +190,6 @@ fn main() -> ! {
     unsafe {
         // Enable the USB interrupt
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
-        pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
         pac::NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
     }
     // defmt のタイムスタンプを実装します
@@ -252,24 +251,6 @@ fn USBCTRL_IRQ() {
             .map(Keyboard::usb_poll);
         LOCK.store(false, Ordering::Relaxed);
     });
-}
-
-#[allow(non_snake_case)]
-#[interrupt]
-fn UART0_IRQ() {
-    cortex_m::interrupt::free(|cs| unsafe {
-        while LOCK.load(Ordering::Relaxed) {
-            core::hint::spin_loop()
-        }
-        LOCK.store(true, Ordering::Relaxed);
-        KEYBOARD
-            .borrow(cs)
-            .borrow()
-            .as_ref()
-            .map(Keyboard::split_poll);
-        LOCK.store(false, Ordering::Relaxed);
-    });
-    cortex_m::asm::sev();
 }
 
 #[allow(non_snake_case)]
