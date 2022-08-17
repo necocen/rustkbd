@@ -45,9 +45,9 @@ pub trait ConnectionExt: Connection {
         match head {
             0x00 | 0x01 => {
                 let ctor = if head == 0x00 {
-                    Message::KeyInput
+                    Message::Switches
                 } else {
-                    Message::KeyInputReply
+                    Message::SwitchesReply
                 };
                 self.read(&mut buf[..1])
                     .map_err(|source| Error::ReadError { source })?;
@@ -85,8 +85,8 @@ pub trait ConnectionExt: Connection {
             "MAX_BUF_LEN must be large enough to write SI bytes x RO keys"
         );
         match message {
-            Message::KeyInput(ref keys) | Message::KeyInputReply(ref keys) => {
-                let head = if let Message::KeyInput(_) = message {
+            Message::Switches(ref keys) | Message::SwitchesReply(ref keys) => {
+                let head = if let Message::Switches(_) = message {
                     0x00
                 } else {
                     0x01

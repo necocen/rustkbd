@@ -211,8 +211,8 @@ impl rustkbd_core::layout::Layout<2, Layer> for Layout {
             .unwrap_or_default()
     }
 
-    fn key(&self, layer: Layer, switch: Self::Identifier) -> Key {
-        match (layer, switch) {
+    fn key(&self, layer: Layer, switch: &Self::Identifier) -> Key {
+        match (layer, *switch) {
             (Layer::Default, KeySwitchIdentifier { row, col }) => {
                 Self::KEY_CODES_DEFAULT[row as usize][col as usize]
             }

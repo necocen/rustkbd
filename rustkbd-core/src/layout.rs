@@ -5,5 +5,5 @@ pub trait Layout<const SZ: usize, L: KeyboardLayer> {
 
     fn layer(&self, switches: &[Self::Identifier]) -> L;
 
-    fn key(&self, layer: L, switch: Self::Identifier) -> Key;
+    fn key(&self, layer: L, switch: &Self::Identifier) -> Key;
 }

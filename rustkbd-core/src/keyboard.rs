@@ -55,7 +55,7 @@ pub struct Keyboard<
     key_switches: K,
     split_connection: S,
     split_state: RefCell<SplitState>,
-    self_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
+    switches: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
     split_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
     timer: RefCell<T>,
     layer: RefCell<Y>,
@@ -99,7 +99,7 @@ impl<
             key_switches,
             split_connection: DummyConnection::default(),
             split_state: RefCell::new(SplitState::NotAvailable),
-            self_buf: RefCell::new(Vec::new()),
+            switches: RefCell::new(Vec::new()),
             split_buf: RefCell::new(Vec::new()),
             timer: RefCell::new(timer),
             layer: RefCell::new(Y::default()),
@@ -147,7 +147,7 @@ impl<
             key_switches,
             split_connection,
             split_state: RefCell::new(SplitState::Undetermined),
-            self_buf: RefCell::new(Vec::new()),
+            switches: RefCell::new(Vec::new()),
             split_buf: RefCell::new(Vec::new()),
             timer: RefCell::new(timer),
             layer: RefCell::new(Y::default()),
@@ -157,50 +157,76 @@ impl<
         }
     }
 
-    pub fn main_loop(&self) {
-        if self.is_split_undetermined()
-            && self.usb_device.borrow().state() == UsbDeviceState::Configured
-        {
-            if let Err(e) = self.split_establish() {
-                defmt::warn!("Split establish error: {}", e);
-            }
-        }
+    pub fn get_state(&self) -> KeyboardState<Y, NUM_ROLLOVER> {
+        let layer = *self.layer.borrow();
+        let keys = self.keys.borrow().clone();
+        let split = *self.split_state.borrow();
+        KeyboardState { layer, keys, split }
+    }
 
-        // scan key matrix
-        let scan = self.key_switches.scan();
-        *self.self_buf.borrow_mut() = scan;
+    fn try_establish_split_connection_if_needed(&self) {
+        if *self.split_state.borrow() != SplitState::Undetermined {
+            return;
+        }
+        if self.usb_device.borrow().state() != UsbDeviceState::Configured {
+            return;
+        }
+        if let Err(e) = self.split_establish() {
+            defmt::warn!("Failed to establish split connection: {}", e);
+        }
+    }
+
+    fn is_controller(&self) -> bool {
+        *self.split_state.borrow() == SplitState::Controller
+    }
+
+    fn scan_switches(&self) {
+        *self.switches.borrow_mut() = self.key_switches.scan();
+    }
+
+    pub fn main_loop(&self) {
+        self.try_establish_split_connection_if_needed();
+
+        self.scan_switches();
 
         if self.is_controller() {
             self.split_write_keys();
-            if let Ok(Message::KeyInputReply(switches)) = self.split_read_message() {
+            if let Ok(Message::SwitchesReply(switches)) = self.split_read_message() {
                 // replied
                 *self.split_buf.borrow_mut() = switches;
             }
         }
-        let self_side = self.self_buf.borrow();
-        let other_side = self.split_buf.borrow();
-        let switches = self_side
+
+        let near_side = self.switches.borrow();
+        let far_side = self.split_buf.borrow();
+        let switches = near_side
             .iter()
-            .chain(other_side.iter())
-            .take(NUM_ROLLOVER)
+            .chain(far_side.iter())
+            .take(NUM_SWITCH_ROLLOVER)
             .copied()
-            .collect::<Vec<K::Identifier, NUM_ROLLOVER>>();
+            .collect::<Vec<_, NUM_SWITCH_ROLLOVER>>();
 
         // グローバルなレイヤの決定
-        *self.layer.borrow_mut() = self.layout.layer(&switches);
+        let global_layer = self.layout.layer(&switches);
+
         // 個別のスイッチのレイヤの決定
-        let switches_and_layers = switches
-            .iter()
-            .copied()
-            .map(|s| (s, self.layer_for_switch(&s)))
-            .collect::<Vec<(K::Identifier, Y), NUM_ROLLOVER>>();
-        // スイッチ押下状態の更新
-        self.save_pressed_switches(&switches_and_layers);
+        let switches_and_layers = {
+            let pressed_switches = self.pressed_switches.borrow();
+            switches
+                .into_iter()
+                .map(|s| (s, determine_layer(&pressed_switches, &s, global_layer)))
+                .collect::<Vec<(K::Identifier, Y), NUM_SWITCH_ROLLOVER>>()
+        };
+
         // キーの決定
-        let keys = self.keys_by_switches_and_layers(&switches_and_layers);
+        let keys = determine_keys(&self.layout, &switches_and_layers);
         if !keys.is_empty() {
             defmt::debug!("{}", keys.as_slice());
         }
+
+        // スイッチ押下状態の更新
+        self.save_pressed_switches(&switches_and_layers);
+        *self.layer.borrow_mut() = global_layer;
         *self.keys.borrow_mut() = keys;
     }
 
@@ -213,13 +239,13 @@ impl<
 
     pub fn split_poll(&self) {
         match self.split_read_message() {
-            Ok(Message::KeyInput(keys)) => {
-                *self.split_buf.borrow_mut() = keys;
+            Ok(Message::Switches(switches)) => {
+                *self.split_buf.borrow_mut() = switches;
                 self.split_write_keys_reply();
             }
-            Ok(Message::KeyInputReply(keys)) => {
+            Ok(Message::SwitchesReply(switches)) => {
                 // 通常ここには来ないがタイミングの問題で来る場合があるので適切にハンドリングする
-                *self.split_buf.borrow_mut() = keys;
+                *self.split_buf.borrow_mut() = switches;
             }
             Ok(Message::FindReceiver) => {
                 self.split_connection
@@ -230,30 +256,15 @@ impl<
         }
     }
 
-    pub fn get_state(&self) -> KeyboardState<Y, NUM_ROLLOVER> {
-        let layer = *self.layer.borrow();
-        let keys = self.keys.borrow().clone();
-        let split = *self.split_state.borrow();
-        KeyboardState { layer, keys, split }
-    }
-
-    fn layer(&self) -> Y {
-        *self.layer.borrow()
-    }
-
-    fn split_state(&self) -> SplitState {
-        *self.split_state.borrow()
-    }
-
     fn split_write_keys(&self) {
-        let keys = self.self_buf.borrow().clone();
-        self.split_connection.send_message(Message::KeyInput(keys));
+        let keys = self.switches.borrow().clone();
+        self.split_connection.send_message(Message::Switches(keys));
     }
 
     fn split_write_keys_reply(&self) {
-        let keys = self.self_buf.borrow().clone();
+        let keys = self.switches.borrow().clone();
         self.split_connection
-            .send_message(Message::KeyInputReply(keys));
+            .send_message(Message::SwitchesReply(keys));
     }
 
     fn split_establish(&self) -> Result<(), SplitError<S::Error>> {
@@ -282,97 +293,97 @@ impl<
         )
     }
 
-    fn is_controller(&self) -> bool {
-        self.split_state() == SplitState::Controller
-    }
-
-    fn is_split_undetermined(&self) -> bool {
-        self.split_state() == SplitState::Undetermined
-    }
-
-    fn is_not_splitted(&self) -> bool {
-        self.split_state() == SplitState::NotAvailable
-    }
-
-    fn layer_for_switch(&self, switch: &K::Identifier) -> Y {
-        let pressed_switches = self.pressed_switches.borrow();
-        if let Some(layer) = pressed_switches.get(switch) {
-            *layer
-        } else {
-            self.layer()
-        }
-    }
-
-    fn keys_by_switches_and_layers(
-        &self,
-        switches_and_layers: &[(K::Identifier, Y)],
-    ) -> Vec<Key, NUM_ROLLOVER> {
-        switches_and_layers
-            .iter()
-            .copied()
-            .map(|(switch, mut layer)| {
-                let mut key = self.layout.key(layer, switch);
-                while key == Key::Transparent {
-                    if let Some(below) = layer.below() {
-                        assert!(
-                            layer != below,
-                            "{}.below() does not change layer",
-                            stringify!(Y)
-                        );
-                        layer = below;
-                        key = self.layout.key(layer, switch);
-                    } else {
-                        break;
-                    }
-                }
-                key
-            })
-            .filter(|key| !key.is_noop())
-            .collect::<Vec<Key, NUM_ROLLOVER>>()
-    }
-
     fn save_pressed_switches(&self, switches_and_layers: &[(K::Identifier, Y)]) {
         let mut pressed_switches = self.pressed_switches.borrow_mut();
         *pressed_switches = switches_and_layers.iter().cloned().collect();
     }
 
-    fn keyboard_report(&self, keys: &[Key]) -> HidKeyboardReport {
-        let modifier = keys
-            .iter()
-            .map(|key| key.modifier_key_flag())
-            .fold(0x00_u8, |acc, flg| acc | flg);
-        let mut key_codes = [0u8; 6];
-        keys.iter()
-            .filter_map(|key| key.key_code())
-            .take(NUM_ROLLOVER)
-            .enumerate()
-            .for_each(|(i, c)| key_codes[i] = c);
-        HidKeyboardReport {
-            modifier,
-            reserved: 0,
-            key_codes,
-        }
-    }
-
-    fn media_report(&self, key: Option<Key>) -> MediaKeyboardReport {
-        MediaKeyboardReport {
-            usage_id: key.map(|key| key.media_usage_id()).unwrap_or(0),
-        }
-    }
-
     pub fn send_keys(&self) -> Result<(), UsbError> {
-        if self.is_controller()
-            || (self.is_not_splitted()
-                && self.usb_device.borrow().state() == UsbDeviceState::Configured)
-        {
-            let keys = self.keys.borrow();
-            let report = self.keyboard_report(&keys);
-            self.keyboard_usb_hid.borrow().push_input(&report)?;
-
-            let media_key = keys.iter().find(|key| key.is_media_key()).cloned();
-            let report = self.media_report(media_key);
-            self.media_usb_hid.borrow().push_input(&report)?;
+        if self.usb_device.borrow().state() != UsbDeviceState::Configured {
+            return Ok(());
         }
+
+        if *self.split_state.borrow() == SplitState::Receiver
+            || *self.split_state.borrow() == SplitState::Undetermined
+        {
+            return Ok(());
+        }
+
+        let keys = self.keys.borrow();
+        let report = keyboard_report(&keys);
+        self.keyboard_usb_hid.borrow().push_input(&report)?;
+        let media_key = keys.iter().find(|key| key.is_media_key());
+        let report = media_report(media_key);
+        self.media_usb_hid.borrow().push_input(&report)?;
+
         Ok(())
     }
+}
+
+fn keyboard_report(keys: &[Key]) -> HidKeyboardReport {
+    let modifier = keys
+        .iter()
+        .map(|key| key.modifier_key_flag())
+        .fold(0x00_u8, |acc, flg| acc | flg);
+    let mut key_codes = [0u8; 6];
+    keys.iter()
+        .filter_map(|key| key.key_code())
+        .take(NUM_ROLLOVER)
+        .enumerate()
+        .for_each(|(i, c)| key_codes[i] = c);
+    HidKeyboardReport {
+        modifier,
+        reserved: 0,
+        key_codes,
+    }
+}
+
+fn media_report(key: Option<&Key>) -> MediaKeyboardReport {
+    MediaKeyboardReport {
+        usage_id: key.map(|key| key.media_usage_id()).unwrap_or(0),
+    }
+}
+
+fn determine_layer<
+    Y: KeyboardLayer,
+    SI: KeySwitchIdentifier<SZ>,
+    const SZ: usize,
+    const N: usize,
+>(
+    pressed_switches: &FnvIndexMap<SI, Y, N>,
+    switch: &SI,
+    global_layer: Y,
+) -> Y {
+    if let Some(layer) = pressed_switches.get(switch) {
+        *layer
+    } else {
+        global_layer
+    }
+}
+
+fn determine_keys<Y: KeyboardLayer, L: Layout<SZ, Y>, const SZ: usize>(
+    layout: &L,
+    switches_and_layers: &[(L::Identifier, Y)],
+) -> Vec<Key, NUM_ROLLOVER> {
+    switches_and_layers
+        .iter()
+        .map(|(switch, mut layer)| {
+            let mut key = layout.key(layer, switch);
+            while key == Key::Transparent {
+                if let Some(below) = layer.below() {
+                    assert!(
+                        layer != below,
+                        "{}.below() does not change layer",
+                        stringify!(Y)
+                    );
+                    layer = below;
+                    key = layout.key(layer, switch);
+                } else {
+                    break;
+                }
+            }
+            key
+        })
+        .filter(|key| !key.is_noop())
+        .collect::<Vec<Key, NUM_ROLLOVER>>()
 }

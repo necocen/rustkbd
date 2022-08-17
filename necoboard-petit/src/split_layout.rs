@@ -59,8 +59,8 @@ impl Layout<3, Layer> for SplitLayout {
             .unwrap_or_default()
     }
 
-    fn key(&self, layer: Layer, switch: Self::Identifier) -> Key {
-        match (layer, switch) {
+    fn key(&self, layer: Layer, switch: &Self::Identifier) -> Key {
+        match (layer, *switch) {
             (Layer::Default, SplitKeySwitchIdentifier::Left { row, col }) => {
                 Self::KEY_CODES_LEFT[row as usize][col as usize]
             }
