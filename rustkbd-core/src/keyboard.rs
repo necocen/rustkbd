@@ -321,21 +321,17 @@ impl<
 }
 
 fn keyboard_report(keys: &[Key]) -> HidKeyboardReport {
-    let modifier = keys
+    let mut report = HidKeyboardReport::empty();
+    report.modifier = keys
         .iter()
         .map(|key| key.modifier_key_flag())
         .fold(0x00_u8, |acc, flg| acc | flg);
-    let mut key_codes = [0u8; 6];
     keys.iter()
         .filter_map(|key| key.key_code())
         .take(NUM_ROLLOVER)
         .enumerate()
-        .for_each(|(i, c)| key_codes[i] = c);
-    HidKeyboardReport {
-        modifier,
-        reserved: 0,
-        key_codes,
-    }
+        .for_each(|(i, c)| report.key_codes[i] = c);
+    report
 }
 
 fn media_report(key: Option<&Key>) -> MediaKeyboardReport {

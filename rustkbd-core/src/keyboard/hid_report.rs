@@ -23,3 +23,13 @@ pub struct HidKeyboardReport {
     pub reserved: u8,
     pub key_codes: [u8; 6],
 }
+
+impl HidKeyboardReport {
+    pub fn empty() -> HidKeyboardReport {
+        HidKeyboardReport {
+            modifier: 0,
+            reserved: 0,
+            key_codes: [0; 6],
+        }
+    }
+}
