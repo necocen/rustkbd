@@ -206,9 +206,11 @@ fn main() -> ! {
     loop {
         cortex_m::interrupt::free(|cs| unsafe {
             let _lock = Spinlock0::claim();
-            let keyboard = KEYBOARD.borrow(cs).borrow();
-            let keyboard = keyboard.as_ref().unwrap();
-            keyboard.main_loop();
+            KEYBOARD
+                .borrow(cs)
+                .borrow()
+                .as_ref()
+                .map(Keyboard::main_loop);
         });
         watchdog.feed();
     }
