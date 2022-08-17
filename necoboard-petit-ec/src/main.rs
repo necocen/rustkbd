@@ -26,7 +26,7 @@ use hal::{
     gpio::{bank0::Gpio26, FloatingInput, FunctionSpi, Pin},
     Adc, Spi,
 };
-use heapless::{String, Vec};
+use heapless::String;
 use key_matrix::KeyMatrix;
 use layout::{Layer, Layout};
 use panic_probe as _;
@@ -35,7 +35,7 @@ use rp_pico::{
     pac::{self, interrupt},
 };
 use rustkbd_core::{
-    keyboard::{DeviceInfo, Key, Keyboard},
+    keyboard::{DeviceInfo, Keyboard, KeyboardState},
     split::{DummyConnection, SplitState},
 };
 use ssd1306::{
@@ -184,12 +184,7 @@ fn main() -> ! {
             if let Err(e) = keyboard.send_keys() {
                 defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
             }
-            draw_state(
-                &mut display,
-                keyboard.layer(),
-                keyboard.keys(),
-                keyboard.split_state(),
-            );
+            draw_state(&mut display, keyboard.get_state());
             display.flush().ok();
         });
     }
@@ -220,18 +215,15 @@ fn UART0_IRQ() {
     cortex_m::asm::sev();
 }
 
-fn draw_state(
-    display: &mut impl DrawTarget<Color = BinaryColor>,
-    layer: Layer,
-    keys: Vec<Key, 6>,
-    split: SplitState,
-) {
+fn draw_state(display: &mut impl DrawTarget<Color = BinaryColor>, state: KeyboardState<Layer, 6>) {
     let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
     display.clear(BinaryColor::Off).ok();
 
     // print pressed keys
     let mut string = String::<6>::new();
-    keys.into_iter()
+    state
+        .keys
+        .into_iter()
         .filter(|key| key.is_keyboard_key())
         .map(From::from)
         .for_each(|c| {
@@ -242,18 +234,18 @@ fn draw_state(
         .ok();
 
     // display "Receiver" or "Controller"
-    let state = match split {
+    let split = match state.split {
         SplitState::Undetermined => "Undetermined",
         SplitState::NotAvailable => "N/A",
         SplitState::Controller => "Controller",
         SplitState::Receiver => "Receiver",
     };
-    Text::new(state, Point::new(0, 22), char_style)
+    Text::new(split, Point::new(0, 22), char_style)
         .draw(display)
         .ok();
 
     // display Layer
-    let layer = match layer {
+    let layer = match state.layer {
         Layer::Default => "Default",
         Layer::Lower => "Lower",
         Layer::Raise => "Raise",

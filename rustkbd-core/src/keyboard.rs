@@ -2,7 +2,9 @@ mod device_info;
 mod hid_report;
 mod key;
 mod key_switches;
+mod keyboard_state;
 mod layer;
+
 use core::cell::RefCell;
 
 use embedded_hal::timer::CountDown;
@@ -28,6 +30,7 @@ use hid_report::HidKeyboardReport;
 pub use device_info::DeviceInfo;
 pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
+pub use keyboard_state::KeyboardState;
 pub use layer::KeyboardLayer;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
@@ -226,15 +229,18 @@ impl<
         }
     }
 
-    pub fn layer(&self) -> Y {
+    pub fn get_state(&self) -> KeyboardState<Y, NUM_ROLLOVER> {
+        let layer = *self.layer.borrow();
+        let keys = self.keys.borrow().clone();
+        let split = *self.split_state.borrow();
+        KeyboardState { layer, keys, split }
+    }
+
+    fn layer(&self) -> Y {
         *self.layer.borrow()
     }
 
-    pub fn keys(&self) -> Vec<Key, NUM_ROLLOVER> {
-        self.keys.borrow().clone()
-    }
-
-    pub fn split_state(&self) -> SplitState {
+    fn split_state(&self) -> SplitState {
         *self.split_state.borrow()
     }
 
