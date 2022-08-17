@@ -95,7 +95,7 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
     let mut alarm0 = TIMER.as_mut().unwrap().alarm_0().unwrap();
     alarm0.schedule(10_000.microseconds()).unwrap();
@@ -119,8 +119,6 @@ fn main() -> ! {
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
     let cores = mc.cores();
     let core1 = &mut cores[1];
-
-    delay.delay_ms(100);
 
     let spi = Spi::<_, _, 8>::new(pac.SPI1).init(
         &mut pac.RESETS,
