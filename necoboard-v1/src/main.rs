@@ -133,7 +133,7 @@ fn main() -> ! {
         pins.gpio8.into_push_pull_output(),
         pins.gpio9.into_push_pull_output(),
     );
-    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate90)
+    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
         .into_buffered_graphics_mode();
     display.init().ok();
 
