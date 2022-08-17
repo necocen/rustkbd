@@ -11,14 +11,6 @@ use cortex_m::{
     interrupt::Mutex,
 };
 use defmt_rtt as _;
-use embedded_graphics::{
-    draw_target::DrawTarget,
-    mono_font::{ascii::FONT_6X10, MonoTextStyle},
-    pixelcolor::BinaryColor,
-    prelude::Point,
-    text::Text,
-    Drawable,
-};
 use embedded_hal::{
     spi::MODE_0,
     watchdog::{Watchdog, WatchdogEnable},
@@ -32,7 +24,6 @@ use hal::{
     timer::Alarm,
     Adc, Spi,
 };
-use heapless::String;
 use key_matrix::KeyMatrix;
 use layout::{Layer, Layout};
 use panic_probe as _;
@@ -42,8 +33,8 @@ use rp_pico::{
     pac::{self, interrupt},
 };
 use rustkbd_core::{
-    keyboard::{DeviceInfo, Keyboard, KeyboardState},
-    split::{DummyConnection, SplitState},
+    keyboard::{DeviceInfo, Keyboard},
+    split::DummyConnection,
 };
 use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
@@ -51,6 +42,7 @@ use ssd1306::{
 };
 use usb_device::class_prelude::UsbBusAllocator;
 
+mod drawing;
 mod filter;
 mod key_matrix;
 mod layout;
@@ -208,7 +200,7 @@ fn main() -> ! {
                 let _lock = Spinlock0::claim();
                 KEYBOARD.borrow(cs).borrow().as_ref().unwrap().get_state()
             });
-            draw_state(&mut display, state);
+            drawing::draw_state(&mut display, state);
             display.flush().ok();
         })
         .unwrap();
@@ -256,44 +248,4 @@ fn TIMER_IRQ_0() {
             defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
         }
     });
-}
-
-fn draw_state(display: &mut impl DrawTarget<Color = BinaryColor>, state: KeyboardState<Layer, 6>) {
-    let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
-    display.clear(BinaryColor::Off).ok();
-
-    // print pressed keys
-    let mut string = String::<6>::new();
-    state
-        .keys
-        .into_iter()
-        .filter(|key| key.is_keyboard_key())
-        .map(From::from)
-        .for_each(|c| {
-            string.push(c).ok();
-        });
-    Text::new(string.as_str(), Point::new(0, 10), char_style)
-        .draw(display)
-        .ok();
-
-    // display "Receiver" or "Controller"
-    let split = match state.split {
-        SplitState::Undetermined => "Undetermined",
-        SplitState::NotAvailable => "N/A",
-        SplitState::Controller => "Controller",
-        SplitState::Receiver => "Receiver",
-    };
-    Text::new(split, Point::new(0, 22), char_style)
-        .draw(display)
-        .ok();
-
-    // display Layer
-    let layer = match state.layer {
-        Layer::Default => "Default",
-        Layer::Lower => "Lower",
-        Layer::Raise => "Raise",
-    };
-    Text::new(layer, Point::new(0, 34), char_style)
-        .draw(display)
-        .ok();
 }
