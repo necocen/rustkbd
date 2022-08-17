@@ -180,14 +180,8 @@ impl<
         *self.split_state.borrow() == SplitState::Controller
     }
 
-    fn scan_switches(&self) {
+    fn scan_switches(&self) -> Vec<K::Identifier, NUM_SWITCH_ROLLOVER> {
         *self.switches.borrow_mut() = self.key_switches.scan();
-    }
-
-    pub fn main_loop(&self) {
-        self.try_establish_split_connection_if_needed();
-
-        self.scan_switches();
 
         if self.is_controller() {
             self.split_write_keys();
@@ -199,27 +193,30 @@ impl<
 
         let near_side = self.switches.borrow();
         let far_side = self.split_buf.borrow();
-        let switches = near_side
+
+        near_side
             .iter()
             .chain(far_side.iter())
             .take(NUM_SWITCH_ROLLOVER)
             .copied()
-            .collect::<Vec<_, NUM_SWITCH_ROLLOVER>>();
+            .collect()
+    }
+
+    pub fn main_loop(&self) {
+        self.try_establish_split_connection_if_needed();
+
+        let switches = self.scan_switches();
 
         // グローバルなレイヤの決定
         let global_layer = self.layout.layer(&switches);
 
         // 個別のスイッチのレイヤの決定
-        let switches_and_layers = {
-            let pressed_switches = self.pressed_switches.borrow();
-            switches
-                .into_iter()
-                .map(|s| (s, determine_layer(&pressed_switches, &s, global_layer)))
-                .collect::<Vec<(K::Identifier, Y), NUM_SWITCH_ROLLOVER>>()
-        };
+        let switches_and_layers =
+            determine_layers(&self.pressed_switches.borrow(), &switches, global_layer);
 
         // キーの決定
         let keys = determine_keys(&self.layout, &switches_and_layers);
+
         if !keys.is_empty() {
             defmt::debug!("{}", keys.as_slice());
         }
@@ -293,9 +290,12 @@ impl<
         )
     }
 
-    fn save_pressed_switches(&self, switches_and_layers: &[(K::Identifier, Y)]) {
-        let mut pressed_switches = self.pressed_switches.borrow_mut();
-        *pressed_switches = switches_and_layers.iter().cloned().collect();
+    fn save_pressed_switches(&self, switches_and_layers: &[(&K::Identifier, Y)]) {
+        *self.pressed_switches.borrow_mut() = switches_and_layers
+            .iter()
+            .cloned()
+            .map(|(s, l)| (*s, l))
+            .collect();
     }
 
     pub fn send_keys(&self) -> Result<(), UsbError> {
@@ -344,26 +344,34 @@ fn media_report(key: Option<&Key>) -> MediaKeyboardReport {
     }
 }
 
-fn determine_layer<
+fn determine_layers<
+    'a,
     Y: KeyboardLayer,
     SI: KeySwitchIdentifier<SZ>,
     const SZ: usize,
     const N: usize,
 >(
     pressed_switches: &FnvIndexMap<SI, Y, N>,
-    switch: &SI,
+    switches: &'a [SI],
     global_layer: Y,
-) -> Y {
-    if let Some(layer) = pressed_switches.get(switch) {
-        *layer
-    } else {
-        global_layer
-    }
+) -> Vec<(&'a SI, Y), NUM_SWITCH_ROLLOVER> {
+    // 個別のスイッチのレイヤの決定
+    switches
+        .iter()
+        .map(|s| {
+            let layer = if let Some(layer) = pressed_switches.get(s) {
+                *layer
+            } else {
+                global_layer
+            };
+            (s, layer)
+        })
+        .collect::<Vec<(&SI, Y), NUM_SWITCH_ROLLOVER>>()
 }
 
 fn determine_keys<Y: KeyboardLayer, L: Layout<SZ, Y>, const SZ: usize>(
     layout: &L,
-    switches_and_layers: &[(L::Identifier, Y)],
+    switches_and_layers: &[(&L::Identifier, Y)],
 ) -> Vec<Key, NUM_ROLLOVER> {
     switches_and_layers
         .iter()
