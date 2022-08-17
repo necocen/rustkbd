@@ -69,7 +69,7 @@ fn main() -> ! {
     static mut TIMER: Option<Timer> = None;
     static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
 
-    defmt::info!("Launching necoboard-petit EC!");
+    defmt::info!("Launching necoboard v1!");
 
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
