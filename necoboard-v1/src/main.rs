@@ -243,17 +243,20 @@ fn USBCTRL_IRQ() {
 #[interrupt]
 fn TIMER_IRQ_0() {
     cortex_m::interrupt::free(|cs| unsafe {
-        let _lock = Spinlock0::claim();
         let mut alarm = ALARM.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
-        let keyboard = KEYBOARD.borrow(cs).borrow();
-        let keyboard = keyboard.as_ref().unwrap();
-        if let Err(e) = keyboard.send_keys() {
+        alarm.schedule(10_000.microseconds()).unwrap();
+        let _lock = Spinlock0::claim();
+        alarm.enable_interrupt();
+        if let Some(Err(e)) = KEYBOARD
+            .borrow(cs)
+            .borrow()
+            .as_ref()
+            .map(Keyboard::send_keys)
+        {
             defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
         }
-        alarm.schedule(10_000.microseconds()).unwrap();
-        alarm.enable_interrupt();
     });
 }
 
