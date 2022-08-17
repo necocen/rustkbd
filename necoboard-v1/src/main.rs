@@ -6,15 +6,9 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use cortex_m::{
-    delay::{self, Delay},
-    interrupt::Mutex,
-};
+use cortex_m::{delay::Delay, interrupt::Mutex};
 use defmt_rtt as _;
-use embedded_hal::{
-    spi::MODE_0,
-    watchdog::{Watchdog, WatchdogEnable},
-};
+use embedded_hal::watchdog::{Watchdog, WatchdogEnable};
 use embedded_time::duration::Extensions;
 use embedded_time::rate::*;
 use hal::{
@@ -22,7 +16,7 @@ use hal::{
     multicore::{Multicore, Stack},
     sio::Spinlock0,
     timer::Alarm,
-    Adc, Spi,
+    Adc,
 };
 use key_matrix::KeyMatrix;
 use layout::{Layer, Layout};
@@ -35,10 +29,6 @@ use rp_pico::{
 use rustkbd_core::{
     keyboard::{DeviceInfo, Keyboard},
     split::DummyConnection,
-};
-use ssd1306::{
-    mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
-    Ssd1306,
 };
 use usb_device::class_prelude::UsbBusAllocator;
 
@@ -60,8 +50,9 @@ type KeyboardType = Keyboard<
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
 static mut ALARM: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCell::new(None));
-
 static mut CORE1_STACK: Stack<4096> = Stack::new();
+
+const USB_SEND_INTERVAL_MICROS: u32 = 10_000;
 
 #[entry]
 fn main() -> ! {
@@ -95,17 +86,17 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-    let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
-    *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
-    let mut alarm0 = TIMER.as_mut().unwrap().alarm_0().unwrap();
-    alarm0.schedule(10_000.microseconds()).unwrap();
-    alarm0.enable_interrupt();
+
+    let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS);
+    let mut alarm = timer.alarm_0().unwrap();
+    alarm
+        .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
+        .unwrap();
+    alarm.enable_interrupt();
     cortex_m::interrupt::free(|cs| unsafe {
-        ALARM.borrow(cs).replace(Some(alarm0));
+        ALARM.borrow(cs).replace(Some(alarm));
     });
-    let adc = Adc::new(pac.ADC, &mut pac.RESETS);
-    watchdog.pause_on_debug(true);
-    watchdog.start(1_000_000.microseconds());
+    *TIMER = Some(timer);
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -120,22 +111,15 @@ fn main() -> ! {
     let cores = mc.cores();
     let core1 = &mut cores[1];
 
-    let spi = Spi::<_, _, 8>::new(pac.SPI1).init(
+    let mut display = drawing::display(
+        pac.SPI1,
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
-        16_000_000u32.Hz(),
-        &MODE_0,
-    );
-    let _ = pins.gpio10.into_mode::<FunctionSpi>();
-    let _ = pins.gpio11.into_mode::<FunctionSpi>();
-    let interface = SPIInterface::new(
-        spi,
         pins.gpio8.into_push_pull_output(),
         pins.gpio9.into_push_pull_output(),
+        pins.gpio10.into_mode::<FunctionSpi>(),
+        pins.gpio11.into_mode::<FunctionSpi>(),
     );
-    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-        .into_buffered_graphics_mode();
-    display.init().ok();
 
     let key_matrix = KeyMatrix::new(
         [
@@ -153,9 +137,9 @@ fn main() -> ! {
         pins.gpio21.into(),
         pins.voltage_monitor.into(),
         pins.gpio28.into(),
-        adc,
+        Adc::new(pac.ADC, &mut pac.RESETS),
         pins.gpio26.into_floating_input(),
-        delay,
+        Delay::new(core.SYST, clocks.system_clock.freq().integer()),
     );
 
     let device_info = DeviceInfo {
@@ -182,6 +166,7 @@ fn main() -> ! {
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
         pac::NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
     }
+
     // defmt のタイムスタンプを実装します
     // タイマを使えば、起動からの時間を表示したりできます
     static COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -202,6 +187,9 @@ fn main() -> ! {
             display.flush().ok();
         })
         .unwrap();
+
+    watchdog.pause_on_debug(true);
+    watchdog.start(1_000_000.microseconds());
 
     loop {
         cortex_m::interrupt::free(|cs| unsafe {
@@ -236,7 +224,9 @@ fn TIMER_IRQ_0() {
         let mut alarm = ALARM.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
-        alarm.schedule(10_000.microseconds()).unwrap();
+        alarm
+            .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
+            .unwrap();
         let _lock = Spinlock0::claim();
         alarm.enable_interrupt();
         if let Some(Err(e)) = KEYBOARD
