@@ -1,6 +1,4 @@
-use heapless::Vec;
-
-use crate::keyboard::KeySwitchIdentifier;
+use crate::{keyboard::KeySwitchIdentifier, Vec};
 
 #[derive(Debug, Clone)]
 pub enum Message<const SZ: usize, const RO: usize, SI: KeySwitchIdentifier<SZ>> {

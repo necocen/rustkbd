@@ -1,6 +1,6 @@
 use core::hash::Hash;
 
-use heapless::Vec;
+use crate::Vec;
 
 pub trait KeySwitches<const SZ: usize, const RO: usize> {
     type Identifier: KeySwitchIdentifier<SZ>;

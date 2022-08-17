@@ -4,9 +4,8 @@ use embedded_hal::{
     blocking::delay::DelayUs,
     digital::v2::{InputPin, OutputPin},
 };
-use heapless::Vec;
 use rp_pico::hal::gpio::DynPin;
-use rustkbd_core::keyboard::KeySwitches;
+use rustkbd_core::{keyboard::KeySwitches, Vec};
 
 use crate::split_switch_identifier::SplitKeySwitchIdentifier;
 

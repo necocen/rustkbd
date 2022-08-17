@@ -294,6 +294,15 @@ dependencies = [
 
 [[package]]
 name = "hash32"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c35f58762feb77d74ebe43bdbc3210f09be9fe6742234d573bacc26ed92b67"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
+name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
@@ -303,11 +312,24 @@ dependencies = [
 
 [[package]]
 name = "heapless"
+version = "0.7.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db04bc24a18b9ea980628ecf00e6c0264f3c1426dac36c00cb49b6fbad8b0743"
+dependencies = [
+ "atomic-polyfill",
+ "hash32 0.2.1",
+ "rustc_version 0.4.0",
+ "spin",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "heapless"
 version = "0.8.0"
 source = "git+https://github.com/japaric/heapless?rev=97ac129ba4344820e9fedb8a0fc7f11d5bf652a6#97ac129ba4344820e9fedb8a0fc7f11d5bf652a6"
 dependencies = [
  "atomic-polyfill",
- "hash32",
+ "hash32 0.3.1",
  "rustc_version 0.4.0",
  "spin",
  "stable_deref_trait",
@@ -383,7 +405,7 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal 0.2.7",
  "embedded-time",
- "heapless",
+ "heapless 0.7.16",
  "nb 1.0.0",
  "panic-probe",
  "rp-pico",
@@ -405,7 +427,7 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal 0.2.7",
  "embedded-time",
- "heapless",
+ "heapless 0.7.16",
  "nb 1.0.0",
  "panic-probe",
  "rp-pico",
@@ -427,7 +449,7 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal 0.2.7",
  "embedded-time",
- "heapless",
+ "heapless 0.7.16",
  "nb 1.0.0",
  "panic-probe",
  "rp-pico",
@@ -732,7 +754,7 @@ dependencies = [
  "defmt",
  "embedded-hal 0.2.7",
  "embedded-time",
- "heapless",
+ "heapless 0.8.0",
  "nb 1.0.0",
  "rustkbd-derive",
  "snafu",

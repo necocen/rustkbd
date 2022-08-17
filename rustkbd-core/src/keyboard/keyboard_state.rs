@@ -1,6 +1,4 @@
-use heapless::Vec;
-
-use super::{Key, KeyboardLayer};
+use super::{Key, KeyboardLayer, Vec};
 use crate::split::SplitState;
 
 #[derive(Debug, Clone)]

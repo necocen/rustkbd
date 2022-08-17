@@ -5,10 +5,9 @@ use core::{
 
 use cortex_m::prelude::_embedded_hal_adc_OneShot;
 use embedded_hal::{adc::Channel, blocking::delay::DelayUs, digital::v2::OutputPin};
-use heapless::Vec;
 use rp2040_hal::adc::Adc;
 use rp_pico::hal::gpio::DynPin;
-use rustkbd_core::keyboard::KeySwitches;
+use rustkbd_core::{keyboard::KeySwitches, Vec};
 
 use crate::{filter::Filter, switch_identifier::KeySwitchIdentifier};
 

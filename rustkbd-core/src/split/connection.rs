@@ -1,8 +1,7 @@
 use embedded_hal::timer::CountDown;
-use heapless::Vec;
 use nb;
 
-use crate::{keyboard::KeySwitchIdentifier, split::Error};
+use crate::{keyboard::KeySwitchIdentifier, split::Error, Vec};
 
 use super::message::Message;
 

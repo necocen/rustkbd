@@ -9,7 +9,7 @@ use core::cell::RefCell;
 
 use embedded_hal::timer::CountDown;
 use embedded_time::duration::Microseconds;
-use heapless::{FnvIndexMap, Vec};
+use heapless::FnvIndexMap;
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
     device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
@@ -23,6 +23,7 @@ use usbd_hid::{
 use crate::{
     layout::Layout,
     split::{Connection, ConnectionExt, DummyConnection, Error as SplitError, Message, SplitState},
+    Vec,
 };
 
 use hid_report::HidKeyboardReport;
