@@ -4,6 +4,7 @@ mod key;
 mod key_switches;
 mod keyboard_state;
 mod layer;
+mod usb_communicator;
 
 use core::cell::RefCell;
 
@@ -12,12 +13,8 @@ use embedded_time::duration::Microseconds;
 use heapless::FnvIndexMap;
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
-    device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
+    prelude::UsbDeviceState,
     UsbError,
-};
-use usbd_hid::{
-    descriptor::{MediaKeyboardReport, SerializedDescriptor},
-    hid_class::HIDClass,
 };
 
 use crate::{
@@ -26,13 +23,13 @@ use crate::{
     Vec,
 };
 
-use hid_report::HidKeyboardReport;
-
 pub use device_info::DeviceInfo;
 pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 pub use keyboard_state::KeyboardState;
 pub use layer::KeyboardLayer;
+
+use self::usb_communicator::UsbCommunicator;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
@@ -49,9 +46,7 @@ pub struct Keyboard<
     Y: KeyboardLayer,
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
-    usb_device: RefCell<UsbDevice<'b, B>>,
-    keyboard_usb_hid: RefCell<HIDClass<'b, B>>,
-    media_usb_hid: RefCell<HIDClass<'b, B>>,
+    usb_communicator: RefCell<UsbCommunicator<'b, B>>,
     key_switches: K,
     split_connection: S,
     split_state: RefCell<SplitState>,
@@ -81,21 +76,8 @@ impl<
         timer: T,
         layout: L,
     ) -> Self {
-        let keyboard_usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
-        let media_usb_hid = HIDClass::new(usb_bus_alloc, MediaKeyboardReport::desc(), 10);
-        let usb_device = UsbDeviceBuilder::new(
-            usb_bus_alloc,
-            UsbVidPid(device_info.vendor_id, device_info.product_id),
-        )
-        .manufacturer(device_info.manufacturer)
-        .product(device_info.product_name)
-        .serial_number(device_info.serial_number)
-        .device_class(0)
-        .build();
         Keyboard {
-            keyboard_usb_hid: RefCell::new(keyboard_usb_hid),
-            media_usb_hid: RefCell::new(media_usb_hid),
-            usb_device: RefCell::new(usb_device),
+            usb_communicator: RefCell::new(UsbCommunicator::new(device_info, usb_bus_alloc)),
             key_switches,
             split_connection: DummyConnection::default(),
             split_state: RefCell::new(SplitState::NotAvailable),
@@ -129,21 +111,8 @@ impl<
         timer: T,
         layout: L,
     ) -> Self {
-        let keyboard_usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
-        let media_usb_hid = HIDClass::new(usb_bus_alloc, MediaKeyboardReport::desc(), 10);
-        let usb_device = UsbDeviceBuilder::new(
-            usb_bus_alloc,
-            UsbVidPid(device_info.vendor_id, device_info.product_id),
-        )
-        .manufacturer(device_info.manufacturer)
-        .product(device_info.product_name)
-        .serial_number(device_info.serial_number)
-        .device_class(0)
-        .build();
         Keyboard {
-            keyboard_usb_hid: RefCell::new(keyboard_usb_hid),
-            media_usb_hid: RefCell::new(media_usb_hid),
-            usb_device: RefCell::new(usb_device),
+            usb_communicator: RefCell::new(UsbCommunicator::new(device_info, usb_bus_alloc)),
             key_switches,
             split_connection,
             split_state: RefCell::new(SplitState::Undetermined),
@@ -168,7 +137,7 @@ impl<
         if *self.split_state.borrow() != SplitState::Undetermined {
             return;
         }
-        if self.usb_device.borrow().state() != UsbDeviceState::Configured {
+        if self.usb_communicator.borrow().state() != UsbDeviceState::Configured {
             return;
         }
         if let Err(e) = self.split_establish() {
@@ -228,10 +197,7 @@ impl<
     }
 
     pub fn usb_poll(&self) {
-        self.usb_device.borrow_mut().poll(&mut [
-            &mut *self.keyboard_usb_hid.borrow_mut(),
-            &mut *self.media_usb_hid.borrow_mut(),
-        ]);
+        self.usb_communicator.borrow_mut().poll()
     }
 
     pub fn split_poll(&self) {
@@ -299,7 +265,7 @@ impl<
     }
 
     pub fn send_keys(&self) -> Result<(), UsbError> {
-        if self.usb_device.borrow().state() != UsbDeviceState::Configured {
+        if self.usb_communicator.borrow().state() != UsbDeviceState::Configured {
             return Ok(());
         }
 
@@ -309,34 +275,9 @@ impl<
             return Ok(());
         }
 
-        let keys = self.keys.borrow();
-        let report = keyboard_report(&keys);
-        self.keyboard_usb_hid.borrow().push_input(&report)?;
-        let media_key = keys.iter().find(|key| key.is_media_key());
-        let report = media_report(media_key);
-        self.media_usb_hid.borrow().push_input(&report)?;
-
-        Ok(())
-    }
-}
-
-fn keyboard_report(keys: &[Key]) -> HidKeyboardReport {
-    let mut report = HidKeyboardReport::empty();
-    report.modifier = keys
-        .iter()
-        .map(|key| key.modifier_key_flag())
-        .fold(0x00_u8, |acc, flg| acc | flg);
-    keys.iter()
-        .filter_map(|key| key.key_code())
-        .take(NUM_ROLLOVER)
-        .enumerate()
-        .for_each(|(i, c)| report.key_codes[i] = c);
-    report
-}
-
-fn media_report(key: Option<&Key>) -> MediaKeyboardReport {
-    MediaKeyboardReport {
-        usage_id: key.map(|key| key.media_usage_id()).unwrap_or(0),
+        self.usb_communicator
+            .borrow()
+            .send_keys(&self.keys.borrow())
     }
 }
 
