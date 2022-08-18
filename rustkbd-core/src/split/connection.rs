@@ -1,9 +1,11 @@
 use embedded_hal::timer::CountDown;
 use nb;
 
-use crate::{keyboard::KeySwitchIdentifier, split::Error, Vec};
-
-use super::message::Message;
+use crate::{
+    keyboard::KeySwitchIdentifier,
+    split::{Error, Message},
+    Vec,
+};
 
 pub trait Connection {
     type Error: 'static + snafu::Error + defmt::Format;

@@ -19,7 +19,7 @@ use usb_device::{
 
 use crate::{
     layout::Layout,
-    split::{Connection, ConnectionExt, DummyConnection, Error as SplitError, Message, SplitState},
+    split::{Connection, DummyConnection, SplitCommunicator, SplitState},
     Vec,
 };
 
@@ -47,12 +47,9 @@ pub struct Keyboard<
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
     usb_communicator: RefCell<UsbCommunicator<'b, B>>,
+    split_communicator: RefCell<SplitCommunicator<SZ, K, S, T>>,
     key_switches: K,
-    split_connection: S,
-    split_state: RefCell<SplitState>,
     switches: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
-    split_buf: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
-    timer: RefCell<T>,
     layer: RefCell<Y>,
     layout: L,
     keys: RefCell<Vec<Key, NUM_ROLLOVER>>,
@@ -78,12 +75,12 @@ impl<
     ) -> Self {
         Keyboard {
             usb_communicator: RefCell::new(UsbCommunicator::new(device_info, usb_bus_alloc)),
+            split_communicator: RefCell::new(SplitCommunicator::new(
+                DummyConnection::default(),
+                timer,
+            )),
             key_switches,
-            split_connection: DummyConnection::default(),
-            split_state: RefCell::new(SplitState::NotAvailable),
             switches: RefCell::new(Vec::new()),
-            split_buf: RefCell::new(Vec::new()),
-            timer: RefCell::new(timer),
             layer: RefCell::new(Y::default()),
             layout,
             keys: RefCell::new(Vec::new()),
@@ -113,12 +110,9 @@ impl<
     ) -> Self {
         Keyboard {
             usb_communicator: RefCell::new(UsbCommunicator::new(device_info, usb_bus_alloc)),
+            split_communicator: RefCell::new(SplitCommunicator::new(split_connection, timer)),
             key_switches,
-            split_connection,
-            split_state: RefCell::new(SplitState::Undetermined),
             switches: RefCell::new(Vec::new()),
-            split_buf: RefCell::new(Vec::new()),
-            timer: RefCell::new(timer),
             layer: RefCell::new(Y::default()),
             layout,
             keys: RefCell::new(Vec::new()),
@@ -129,39 +123,27 @@ impl<
     pub fn get_state(&self) -> KeyboardState<Y, NUM_ROLLOVER> {
         let layer = *self.layer.borrow();
         let keys = self.keys.borrow().clone();
-        let split = *self.split_state.borrow();
+        let split = self.split_communicator.borrow().state();
         KeyboardState { layer, keys, split }
     }
 
     fn try_establish_split_connection_if_needed(&self) {
-        if *self.split_state.borrow() != SplitState::Undetermined {
+        if self.split_communicator.borrow().state() != SplitState::Undetermined {
             return;
         }
         if self.usb_communicator.borrow().state() != UsbDeviceState::Configured {
             return;
         }
-        if let Err(e) = self.split_establish() {
+        if let Err(e) = self.split_communicator.borrow_mut().establish() {
             defmt::warn!("Failed to establish split connection: {}", e);
         }
-    }
-
-    fn is_controller(&self) -> bool {
-        *self.split_state.borrow() == SplitState::Controller
     }
 
     fn scan_switches(&self) -> Vec<K::Identifier, NUM_SWITCH_ROLLOVER> {
         *self.switches.borrow_mut() = self.key_switches.scan();
 
-        if self.is_controller() {
-            self.split_write_keys();
-            if let Ok(Message::SwitchesReply(switches)) = self.split_read_message() {
-                // replied
-                *self.split_buf.borrow_mut() = switches;
-            }
-        }
-
         let near_side = self.switches.borrow();
-        let far_side = self.split_buf.borrow();
+        let far_side = self.split_communicator.borrow_mut().request(&near_side);
 
         near_side
             .iter()
@@ -201,59 +183,9 @@ impl<
     }
 
     pub fn split_poll(&self) {
-        match self.split_read_message() {
-            Ok(Message::Switches(switches)) => {
-                *self.split_buf.borrow_mut() = switches;
-                self.split_write_keys_reply();
-            }
-            Ok(Message::SwitchesReply(switches)) => {
-                // 通常ここには来ないがタイミングの問題で来る場合があるので適切にハンドリングする
-                *self.split_buf.borrow_mut() = switches;
-            }
-            Ok(Message::FindReceiver) => {
-                self.split_connection
-                    .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::Acknowledge);
-                *self.split_state.borrow_mut() = SplitState::Receiver;
-            }
-            _ => {}
-        }
-    }
-
-    fn split_write_keys(&self) {
-        let keys = self.switches.borrow().clone();
-        self.split_connection.send_message(Message::Switches(keys));
-    }
-
-    fn split_write_keys_reply(&self) {
-        let keys = self.switches.borrow().clone();
-        self.split_connection
-            .send_message(Message::SwitchesReply(keys));
-    }
-
-    fn split_establish(&self) -> Result<(), SplitError<S::Error>> {
-        *self.split_state.borrow_mut() = SplitState::Undetermined;
-        self.split_connection
-            .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::FindReceiver);
-        *self.split_state.borrow_mut() = match self.split_read_message()? {
-            Message::Acknowledge => {
-                defmt::info!("Split connection established");
-                SplitState::Controller
-            }
-            _ => {
-                defmt::warn!("Unexpected response");
-                SplitState::Undetermined
-            }
-        };
-        Ok(())
-    }
-
-    fn split_read_message(
-        &self,
-    ) -> Result<Message<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>, SplitError<S::Error>> {
-        self.split_connection.read_message(
-            &mut *self.timer.borrow_mut(),
-            Microseconds::<u64>::new(10_000), // timeout in 10ms
-        )
+        self.split_communicator
+            .borrow_mut()
+            .respond(&self.switches.borrow());
     }
 
     fn save_pressed_switches(&self, switches_and_layers: &[(&K::Identifier, Y)]) {
@@ -269,8 +201,8 @@ impl<
             return Ok(());
         }
 
-        if *self.split_state.borrow() == SplitState::Receiver
-            || *self.split_state.borrow() == SplitState::Undetermined
+        if self.split_communicator.borrow().state() == SplitState::Receiver
+            || self.split_communicator.borrow().state() == SplitState::Undetermined
         {
             return Ok(());
         }
