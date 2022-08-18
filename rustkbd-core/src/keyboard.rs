@@ -173,7 +173,10 @@ impl<
         }
 
         // スイッチ押下状態の更新
-        self.save_pressed_switches(&switches_and_layers);
+        *self.pressed_switches.borrow_mut() = switches_and_layers
+            .into_iter()
+            .map(|(s, l)| (*s, l))
+            .collect();
         *self.layer.borrow_mut() = global_layer;
         *self.keys.borrow_mut() = keys;
     }
@@ -186,14 +189,6 @@ impl<
         self.split_communicator
             .borrow_mut()
             .respond(&self.switches.borrow());
-    }
-
-    fn save_pressed_switches(&self, switches_and_layers: &[(&K::Identifier, Y)]) {
-        *self.pressed_switches.borrow_mut() = switches_and_layers
-            .iter()
-            .cloned()
-            .map(|(s, l)| (*s, l))
-            .collect();
     }
 
     pub fn send_keys(&self) -> Result<(), UsbError> {
@@ -235,7 +230,7 @@ fn determine_layers<
             };
             (s, layer)
         })
-        .collect::<Vec<(&SI, Y), NUM_SWITCH_ROLLOVER>>()
+        .collect()
 }
 
 fn determine_keys<Y: KeyboardLayer, L: Layout<SZ, Y>, const SZ: usize>(
