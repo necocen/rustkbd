@@ -21,6 +21,8 @@ impl<'a, B: UsbBus> UsbCommunicator<'a, B> {
         device_info: DeviceInfo,
         usb_bus_alloc: &'a UsbBusAllocator<B>,
     ) -> UsbCommunicator<'a, B> {
+        let keyboard_usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
+        let media_usb_hid = HIDClass::new(usb_bus_alloc, MediaKeyboardReport::desc(), 10);
         let usb_device = UsbDeviceBuilder::new(
             usb_bus_alloc,
             UsbVidPid(device_info.vendor_id, device_info.product_id),
@@ -30,8 +32,6 @@ impl<'a, B: UsbBus> UsbCommunicator<'a, B> {
         .serial_number(device_info.serial_number)
         .device_class(0)
         .build();
-        let keyboard_usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
-        let media_usb_hid = HIDClass::new(usb_bus_alloc, MediaKeyboardReport::desc(), 10);
 
         UsbCommunicator {
             usb_device,
