@@ -83,7 +83,7 @@ static mut ALARM1: Mutex<RefCell<Option<hal::timer::Alarm1>>> = Mutex::new(RefCe
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
 const USB_SEND_INTERVAL_MICROS: u32 = 10_000;
-const SWITCH_SCAN_INTERVAL_MICROS: u32 = 5_000;
+const SWITCH_SCAN_INTERVAL_MICROS: u32 = 1_000;
 
 #[entry]
 fn main() -> ! {
@@ -154,7 +154,7 @@ fn main() -> ! {
         pins.gpio0.into_mode::<FunctionUart>(),
         pins.gpio1.into_mode::<FunctionUart>(),
     );
-    let mut uart_config = common_configs::_9600_8_N_1;
+    let mut uart_config = common_configs::_115200_8_N_1;
     uart_config.parity = Some(Parity::Even);
     let mut uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(uart_config, clocks.peripheral_clock.freq())
