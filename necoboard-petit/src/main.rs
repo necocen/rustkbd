@@ -37,7 +37,7 @@ use rp_pico::{
     pac::{self, interrupt, UART0},
 };
 use rustkbd_core::{
-    keyboard::{DeviceInfo, Keyboard, KeyboardState},
+    keyboard::{DeviceInfo, Keyboard, KeyboardState, UsbCommunicator},
     split::SplitState,
 };
 use split_key_matrix::SplitKeyMatrix;
@@ -154,9 +154,9 @@ fn main() -> ! {
         product_name: "necoboard petit",
         serial_number: "17",
     };
+    let usb_communicator = UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap());
     let keyboard = Keyboard::new_split(
-        USB_BUS.as_ref().unwrap(),
-        device_info,
+        usb_communicator,
         key_matrix,
         connection,
         TIMER.as_ref().unwrap().count_down(),

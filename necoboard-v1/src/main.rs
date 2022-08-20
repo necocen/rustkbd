@@ -27,7 +27,7 @@ use rp_pico::{
     pac::{self, interrupt},
 };
 use rustkbd_core::{
-    keyboard::{DeviceInfo, Keyboard},
+    keyboard::{DeviceInfo, Keyboard, UsbCommunicator},
     split::DummyConnection,
 };
 use usb_device::class_prelude::UsbBusAllocator;
@@ -151,8 +151,7 @@ fn main() -> ! {
     };
 
     let keyboard = Keyboard::new(
-        USB_BUS.as_ref().unwrap(),
-        device_info,
+        UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap()),
         key_matrix,
         TIMER.as_ref().unwrap().count_down(),
         Layout::default(),

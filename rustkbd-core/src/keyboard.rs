@@ -11,11 +11,7 @@ use core::cell::RefCell;
 use embedded_hal::timer::CountDown;
 use embedded_time::duration::Microseconds;
 use heapless::FnvIndexMap;
-use usb_device::{
-    class_prelude::{UsbBus, UsbBusAllocator},
-    prelude::UsbDeviceState,
-    UsbError,
-};
+use usb_device::{class_prelude::UsbBus, prelude::UsbDeviceState, UsbError};
 
 use crate::{
     layout::Layout,
@@ -28,8 +24,7 @@ pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 pub use keyboard_state::KeyboardState;
 pub use layer::KeyboardLayer;
-
-use self::usb_communicator::UsbCommunicator;
+pub use usb_communicator::UsbCommunicator;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;
@@ -46,7 +41,7 @@ pub struct Keyboard<
     Y: KeyboardLayer,
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
-    usb_communicator: RefCell<UsbCommunicator<'b, B>>,
+    pub usb_communicator: RefCell<UsbCommunicator<'b, B>>,
     split_communicator: RefCell<SplitCommunicator<SZ, K, S, T>>,
     key_switches: K,
     switches: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
@@ -67,14 +62,13 @@ impl<
     > Keyboard<'b, SZ, B, K, DummyConnection, T, Y, L>
 {
     pub fn new(
-        usb_bus_alloc: &'b UsbBusAllocator<B>,
-        device_info: DeviceInfo,
+        usb_communicator: UsbCommunicator<'b, B>,
         key_switches: K,
         timer: T,
         layout: L,
     ) -> Self {
         Keyboard {
-            usb_communicator: RefCell::new(UsbCommunicator::new(device_info, usb_bus_alloc)),
+            usb_communicator: RefCell::new(usb_communicator),
             split_communicator: RefCell::new(SplitCommunicator::new(
                 DummyConnection::default(),
                 timer,
@@ -101,15 +95,14 @@ impl<
     > Keyboard<'b, SZ, B, K, S, T, Y, L>
 {
     pub fn new_split(
-        usb_bus_alloc: &'b UsbBusAllocator<B>,
-        device_info: DeviceInfo,
+        usb_communicator: UsbCommunicator<'b, B>,
         key_switches: K,
         split_connection: S,
         timer: T,
         layout: L,
     ) -> Self {
         Keyboard {
-            usb_communicator: RefCell::new(UsbCommunicator::new(device_info, usb_bus_alloc)),
+            usb_communicator: RefCell::new(usb_communicator),
             split_communicator: RefCell::new(SplitCommunicator::new(split_connection, timer)),
             key_switches,
             switches: RefCell::new(Vec::new()),
