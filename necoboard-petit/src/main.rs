@@ -25,6 +25,7 @@ use hal::{
     multicore::{Multicore, Stack},
     sio::Spinlock0,
     timer::Alarm,
+    uart::Parity,
 };
 use heapless::String;
 use key_matrix::KeyMatrix;
@@ -143,8 +144,10 @@ fn main() -> ! {
         pins.gpio0.into_mode::<FunctionUart>(),
         pins.gpio1.into_mode::<FunctionUart>(),
     );
+    let mut uart_config = common_configs::_9600_8_N_1;
+    uart_config.parity = Some(Parity::Even);
     let mut uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
-        .enable(common_configs::_9600_8_N_1, clocks.peripheral_clock.freq())
+        .enable(uart_config, clocks.peripheral_clock.freq())
         .unwrap();
     uart.enable_rx_interrupt();
     let connection = UartConnection(uart);
