@@ -40,6 +40,7 @@ mod switch_identifier;
 
 type KeyboardType = Controller<
     2,
+    12,
     UsbCommunicator<'static, UsbBus>,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 4, 12>,
     Layer,

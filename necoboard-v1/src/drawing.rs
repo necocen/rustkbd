@@ -28,9 +28,9 @@ use ssd1306::{
 
 use crate::layout::Layer;
 
-pub fn draw_state(
+pub fn draw_state<const RO: usize>(
     display: &mut impl DrawTarget<Color = BinaryColor>,
-    state: KeyboardState<Layer, 6>,
+    state: KeyboardState<Layer, RO>,
 ) {
     let char_style = MonoTextStyle::new(&FONT_9X15, BinaryColor::On);
     display.clear(BinaryColor::Off).ok();

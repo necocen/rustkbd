@@ -64,6 +64,7 @@ mod uart_connection;
 
 type KeyboardType = Controller<
     3,
+    12,
     UsbCommunicator<'static, UsbBus>,
     SplitKeySwitches<
         2,
@@ -232,9 +233,9 @@ fn main() -> ! {
     }
 }
 
-fn draw_state(
+fn draw_state<const RO: usize>(
     display: &mut impl DrawTarget<Color = BinaryColor>,
-    state: KeyboardState<Layer, 6>,
+    state: KeyboardState<Layer, RO>,
     split_state: SplitState,
 ) {
     let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);

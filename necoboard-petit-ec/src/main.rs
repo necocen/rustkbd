@@ -52,6 +52,7 @@ mod uart_connection;
 
 type KeyboardType = Controller<
     2,
+    12,
     UsbCommunicator<'static, UsbBus>,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 3, 4>,
     Layer,
@@ -194,7 +195,10 @@ fn USBCTRL_IRQ() {
     });
 }
 
-fn draw_state(display: &mut impl DrawTarget<Color = BinaryColor>, state: KeyboardState<Layer, 6>) {
+fn draw_state<const RO: usize>(
+    display: &mut impl DrawTarget<Color = BinaryColor>,
+    state: KeyboardState<Layer, RO>,
+) {
     let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
     display.clear(BinaryColor::Off).ok();
 

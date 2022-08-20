@@ -6,15 +6,11 @@ use super::{
     ExternalCommunicator, Key, KeySwitchIdentifier, KeySwitches, KeyboardState, Layer, Layout,
 };
 
-/// 最終的に送信されるキーのロールオーバー数。USBなので6。
-const NUM_ROLLOVER: usize = 6;
-/// キースイッチレベルでのロールオーバー数。modifier keysを含めるので6より大きい。
-const NUM_SWITCH_ROLLOVER: usize = 12;
-
 pub struct Controller<
     const SZ: usize,
+    const RO: usize,
     C: ExternalCommunicator,
-    K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
+    K: KeySwitches<SZ, RO>,
     Y: Layer,
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
@@ -22,17 +18,18 @@ pub struct Controller<
     pub key_switches: K,
     layer: RefCell<Y>,
     layout: L,
-    keys: RefCell<Vec<Key, NUM_ROLLOVER>>,
+    keys: RefCell<Vec<Key, RO>>,
     pressed_switches: RefCell<FnvIndexMap<K::Identifier, Y, 16>>,
 }
 
 impl<
         const SZ: usize,
+        const RO: usize,
         C: ExternalCommunicator,
-        K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
+        K: KeySwitches<SZ, RO>,
         Y: Layer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
-    > Controller<SZ, C, K, Y, L>
+    > Controller<SZ, RO, C, K, Y, L>
 {
     pub fn new(communicator: C, key_switches: K, layout: L) -> Self {
         Controller {
@@ -45,7 +42,7 @@ impl<
         }
     }
 
-    pub fn get_state(&self) -> KeyboardState<Y, NUM_ROLLOVER> {
+    pub fn get_state(&self) -> KeyboardState<Y, RO> {
         let layer = *self.layer.borrow();
         let keys = self.keys.borrow().clone();
         KeyboardState { layer, keys }
@@ -58,7 +55,7 @@ impl<
         let global_layer = self.layout.layer(&switches);
 
         // 個別のスイッチのレイヤの決定
-        let switches_and_layers =
+        let switches_and_layers: Vec<_, RO> =
             determine_layers(&self.pressed_switches.borrow(), &switches, global_layer);
 
         // キーの決定
@@ -86,11 +83,18 @@ impl<
     }
 }
 
-fn determine_layers<'a, Y: Layer, SI: KeySwitchIdentifier<SZ>, const SZ: usize, const N: usize>(
+fn determine_layers<
+    'a,
+    Y: Layer,
+    SI: KeySwitchIdentifier<SZ>,
+    const SZ: usize,
+    const RO: usize,
+    const N: usize,
+>(
     pressed_switches: &FnvIndexMap<SI, Y, N>,
     switches: &'a [SI],
     global_layer: Y,
-) -> Vec<(&'a SI, Y), NUM_SWITCH_ROLLOVER> {
+) -> Vec<(&'a SI, Y), RO> {
     // 個別のスイッチのレイヤの決定
     switches
         .iter()
@@ -105,10 +109,10 @@ fn determine_layers<'a, Y: Layer, SI: KeySwitchIdentifier<SZ>, const SZ: usize, 
         .collect()
 }
 
-fn determine_keys<Y: Layer, L: Layout<SZ, Y>, const SZ: usize>(
+fn determine_keys<Y: Layer, L: Layout<SZ, Y>, const SZ: usize, const RO: usize>(
     layout: &L,
     switches_and_layers: &[(&L::Identifier, Y)],
-) -> Vec<Key, NUM_ROLLOVER> {
+) -> Vec<Key, RO> {
     switches_and_layers
         .iter()
         .map(|(switch, mut layer)| {
@@ -129,5 +133,5 @@ fn determine_keys<Y: Layer, L: Layout<SZ, Y>, const SZ: usize>(
             key
         })
         .filter(|key| !key.is_noop())
-        .collect::<Vec<Key, NUM_ROLLOVER>>()
+        .collect::<Vec<Key, RO>>()
 }
