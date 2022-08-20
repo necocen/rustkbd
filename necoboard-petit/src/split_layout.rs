@@ -1,9 +1,10 @@
 use rustkbd_core::{
     keyboard::{Key, KeyboardLayer},
     layout::Layout,
+    split::SplitKeySwitchIdentifier,
 };
 
-use crate::split_switch_identifier::SplitKeySwitchIdentifier;
+use crate::key_matrix::KeySwitchIdentifier;
 
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
@@ -45,14 +46,18 @@ impl SplitLayout {
 }
 
 impl Layout<3, Layer> for SplitLayout {
-    type Identifier = SplitKeySwitchIdentifier;
+    type Identifier = SplitKeySwitchIdentifier<2, KeySwitchIdentifier>;
 
     fn layer(&self, switches: &[Self::Identifier]) -> Layer {
         switches
             .iter()
             .map(|switch| match switch {
-                SplitKeySwitchIdentifier::Right { row: 1, col: 0 } => Layer::Lower,
-                SplitKeySwitchIdentifier::Right { row: 1, col: 1 } => Layer::Raise,
+                SplitKeySwitchIdentifier::Right(KeySwitchIdentifier { row: 1, col: 0 }) => {
+                    Layer::Lower
+                }
+                SplitKeySwitchIdentifier::Right(KeySwitchIdentifier { row: 1, col: 1 }) => {
+                    Layer::Raise
+                }
                 _ => Layer::Default,
             })
             .max()
@@ -61,22 +66,22 @@ impl Layout<3, Layer> for SplitLayout {
 
     fn key(&self, layer: Layer, switch: &Self::Identifier) -> Key {
         match (layer, *switch) {
-            (Layer::Default, SplitKeySwitchIdentifier::Left { row, col }) => {
+            (Layer::Default, SplitKeySwitchIdentifier::Left(KeySwitchIdentifier { row, col })) => {
                 Self::KEY_CODES_LEFT[row as usize][col as usize]
             }
-            (Layer::Default, SplitKeySwitchIdentifier::Right { row, col }) => {
+            (Layer::Default, SplitKeySwitchIdentifier::Right(KeySwitchIdentifier { row, col })) => {
                 Self::KEY_CODES_RIGHT[row as usize][col as usize]
             }
-            (Layer::Lower, SplitKeySwitchIdentifier::Left { row, col }) => {
+            (Layer::Lower, SplitKeySwitchIdentifier::Left(KeySwitchIdentifier { row, col })) => {
                 Self::KEY_CODES_LOWER_LEFT[row as usize][col as usize]
             }
-            (Layer::Lower, SplitKeySwitchIdentifier::Right { row, col }) => {
+            (Layer::Lower, SplitKeySwitchIdentifier::Right(KeySwitchIdentifier { row, col })) => {
                 Self::KEY_CODES_LOWER_RIGHT[row as usize][col as usize]
             }
-            (Layer::Raise, SplitKeySwitchIdentifier::Left { row, col }) => {
+            (Layer::Raise, SplitKeySwitchIdentifier::Left(KeySwitchIdentifier { row, col })) => {
                 Self::KEY_CODES_RAISE_LEFT[row as usize][col as usize]
             }
-            (Layer::Raise, SplitKeySwitchIdentifier::Right { row, col }) => {
+            (Layer::Raise, SplitKeySwitchIdentifier::Right(KeySwitchIdentifier { row, col })) => {
                 Self::KEY_CODES_RAISE_RIGHT[row as usize][col as usize]
             }
         }

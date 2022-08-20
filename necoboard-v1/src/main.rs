@@ -23,13 +23,10 @@ use layout::{Layer, Layout};
 use panic_probe as _;
 use rp_pico::{
     entry,
-    hal::{self, prelude::*, timer::CountDown, usb::UsbBus, Timer},
+    hal::{self, prelude::*, usb::UsbBus, Timer},
     pac::{self, interrupt},
 };
-use rustkbd_core::{
-    keyboard::{DeviceInfo, Keyboard, UsbCommunicator},
-    split::DummyConnection,
-};
+use rustkbd_core::keyboard::{DeviceInfo, Keyboard, UsbCommunicator};
 use usb_device::class_prelude::UsbBusAllocator;
 
 mod drawing;
@@ -43,8 +40,6 @@ type KeyboardType = Keyboard<
     2,
     UsbBus,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 4, 12>,
-    DummyConnection,
-    CountDown<'static>,
     Layer,
     Layout,
 >;
@@ -57,7 +52,6 @@ const USB_SEND_INTERVAL_MICROS: u32 = 10_000;
 #[entry]
 fn main() -> ! {
     // These variables must be static due to lifetime constraints
-    static mut TIMER: Option<Timer> = None;
     static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
 
     defmt::info!("Launching necoboard v1!");
@@ -96,7 +90,6 @@ fn main() -> ! {
     cortex_m::interrupt::free(|cs| unsafe {
         ALARM.borrow(cs).replace(Some(alarm));
     });
-    *TIMER = Some(timer);
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -153,7 +146,6 @@ fn main() -> ! {
     let keyboard = Keyboard::new(
         UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap()),
         key_matrix,
-        TIMER.as_ref().unwrap().count_down(),
         Layout::default(),
     );
     cortex_m::interrupt::free(|cs| unsafe {

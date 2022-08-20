@@ -20,6 +20,7 @@ use embedded_graphics::{
 use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
 use embedded_time::rate::*;
 use heapless::String;
+use key_matrix::KeyMatrix;
 use panic_probe as _;
 use rp_pico::{
     hal::{
@@ -38,9 +39,8 @@ use rp_pico::{
 };
 use rustkbd_core::{
     keyboard::{DeviceInfo, Keyboard, KeyboardState, UsbCommunicator},
-    split::SplitState,
+    split::{SplitKeySwitches, SplitState},
 };
-use split_key_matrix::SplitKeyMatrix;
 use split_layout::{Layer, SplitLayout};
 use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
@@ -49,18 +49,21 @@ use ssd1306::{
 use uart_connection::UartConnection;
 use usb_device::class_prelude::UsbBusAllocator;
 
-mod split_key_matrix;
+mod key_matrix;
 mod split_layout;
-mod split_switch_identifier;
 mod uart_connection;
 
 type KeyboardType = Keyboard<
     'static,
     3,
     UsbBus,
-    SplitKeyMatrix<Delay, 2, 2>,
-    UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
-    CountDown<'static>,
+    SplitKeySwitches<
+        2,
+        12,
+        UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
+        KeyMatrix<Delay, 2, 2>,
+        CountDown<'static>,
+    >,
     Layer,
     SplitLayout,
 >;
@@ -140,10 +143,14 @@ fn main() -> ! {
         .into_buffered_graphics_mode();
     display.init().ok();
 
-    let key_matrix = SplitKeyMatrix::new(
-        [pins.gpio16.into(), pins.gpio17.into()],
-        [pins.gpio14.into(), pins.gpio15.into()],
-        delay,
+    let key_switches = SplitKeySwitches::new(
+        KeyMatrix::new(
+            [pins.gpio16.into(), pins.gpio17.into()],
+            [pins.gpio14.into(), pins.gpio15.into()],
+            delay,
+        ),
+        connection,
+        TIMER.as_ref().unwrap().count_down(),
         pins.gpio22.into_pull_up_input().is_low().unwrap(),
     );
     let layout = SplitLayout::default();
@@ -155,13 +162,7 @@ fn main() -> ! {
         serial_number: "17",
     };
     let usb_communicator = UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap());
-    let keyboard = Keyboard::new_split(
-        usb_communicator,
-        key_matrix,
-        connection,
-        TIMER.as_ref().unwrap().count_down(),
-        layout,
-    );
+    let keyboard = Keyboard::new_split(usb_communicator, key_switches, layout);
     cortex_m::interrupt::free(|cs| unsafe {
         KEYBOARD.borrow(cs).replace(Some(keyboard));
     });
@@ -245,7 +246,7 @@ fn UART0_IRQ() {
             .borrow(cs)
             .borrow()
             .as_ref()
-            .map(Keyboard::split_poll)
+            .map(|keyboard| keyboard.key_switches.poll())
     });
     cortex_m::asm::sev();
 }

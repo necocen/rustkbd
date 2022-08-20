@@ -8,16 +8,10 @@ mod usb_communicator;
 
 use core::cell::RefCell;
 
-use embedded_hal::timer::CountDown;
-use embedded_time::duration::Microseconds;
 use heapless::FnvIndexMap;
 use usb_device::{class_prelude::UsbBus, prelude::UsbDeviceState, UsbError};
 
-use crate::{
-    layout::Layout,
-    split::{Connection, DummyConnection, SplitCommunicator, SplitState},
-    Vec,
-};
+use crate::{layout::Layout, split::SplitState, Vec};
 
 pub use device_info::DeviceInfo;
 pub use key::Key;
@@ -36,15 +30,11 @@ pub struct Keyboard<
     const SZ: usize,
     B: UsbBus,
     K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-    S: Connection,
-    T: CountDown<Time = Microseconds<u64>>,
     Y: KeyboardLayer,
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
     pub usb_communicator: RefCell<UsbCommunicator<'b, B>>,
-    split_communicator: RefCell<SplitCommunicator<SZ, K, S, T>>,
-    key_switches: K,
-    switches: RefCell<Vec<K::Identifier, NUM_SWITCH_ROLLOVER>>,
+    pub key_switches: K,
     layer: RefCell<Y>,
     layout: L,
     keys: RefCell<Vec<Key, NUM_ROLLOVER>>,
@@ -56,25 +46,14 @@ impl<
         const SZ: usize,
         B: UsbBus,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-        T: CountDown<Time = Microseconds<u64>>,
         Y: KeyboardLayer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, B, K, DummyConnection, T, Y, L>
+    > Keyboard<'b, SZ, B, K, Y, L>
 {
-    pub fn new(
-        usb_communicator: UsbCommunicator<'b, B>,
-        key_switches: K,
-        timer: T,
-        layout: L,
-    ) -> Self {
+    pub fn new(usb_communicator: UsbCommunicator<'b, B>, key_switches: K, layout: L) -> Self {
         Keyboard {
             usb_communicator: RefCell::new(usb_communicator),
-            split_communicator: RefCell::new(SplitCommunicator::new(
-                DummyConnection::default(),
-                timer,
-            )),
             key_switches,
-            switches: RefCell::new(Vec::new()),
             layer: RefCell::new(Y::default()),
             layout,
             keys: RefCell::new(Vec::new()),
@@ -88,24 +67,14 @@ impl<
         const SZ: usize,
         B: UsbBus,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-        S: Connection,
-        T: CountDown<Time = Microseconds<u64>>,
         Y: KeyboardLayer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, B, K, S, T, Y, L>
+    > Keyboard<'b, SZ, B, K, Y, L>
 {
-    pub fn new_split(
-        usb_communicator: UsbCommunicator<'b, B>,
-        key_switches: K,
-        split_connection: S,
-        timer: T,
-        layout: L,
-    ) -> Self {
+    pub fn new_split(usb_communicator: UsbCommunicator<'b, B>, key_switches: K, layout: L) -> Self {
         Keyboard {
             usb_communicator: RefCell::new(usb_communicator),
-            split_communicator: RefCell::new(SplitCommunicator::new(split_connection, timer)),
             key_switches,
-            switches: RefCell::new(Vec::new()),
             layer: RefCell::new(Y::default()),
             layout,
             keys: RefCell::new(Vec::new()),
@@ -116,40 +85,15 @@ impl<
     pub fn get_state(&self) -> KeyboardState<Y, NUM_ROLLOVER> {
         let layer = *self.layer.borrow();
         let keys = self.keys.borrow().clone();
-        let split = self.split_communicator.borrow().state();
-        KeyboardState { layer, keys, split }
-    }
-
-    fn try_establish_split_connection_if_needed(&self) {
-        if self.split_communicator.borrow().state() != SplitState::Undetermined {
-            return;
+        KeyboardState {
+            layer,
+            keys,
+            split: SplitState::NotAvailable,
         }
-        if self.usb_communicator.borrow().state() != UsbDeviceState::Configured {
-            return;
-        }
-        if let Err(e) = self.split_communicator.borrow_mut().establish() {
-            defmt::warn!("Failed to establish split connection: {}", e);
-        }
-    }
-
-    fn scan_switches(&self) -> Vec<K::Identifier, NUM_SWITCH_ROLLOVER> {
-        *self.switches.borrow_mut() = self.key_switches.scan();
-
-        let near_side = self.switches.borrow();
-        let far_side = self.split_communicator.borrow_mut().request(&near_side);
-
-        near_side
-            .iter()
-            .chain(far_side.iter())
-            .take(NUM_SWITCH_ROLLOVER)
-            .copied()
-            .collect()
     }
 
     pub fn main_loop(&self) {
-        self.try_establish_split_connection_if_needed();
-
-        let switches = self.scan_switches();
+        let switches = self.key_switches.scan();
 
         // グローバルなレイヤの決定
         let global_layer = self.layout.layer(&switches);
@@ -178,20 +122,8 @@ impl<
         self.usb_communicator.borrow_mut().poll()
     }
 
-    pub fn split_poll(&self) {
-        self.split_communicator
-            .borrow_mut()
-            .respond(&self.switches.borrow());
-    }
-
     pub fn send_keys(&self) -> Result<(), UsbError> {
         if self.usb_communicator.borrow().state() != UsbDeviceState::Configured {
-            return Ok(());
-        }
-
-        if self.split_communicator.borrow().state() == SplitState::Receiver
-            || self.split_communicator.borrow().state() == SplitState::Undetermined
-        {
             return Ok(());
         }
 

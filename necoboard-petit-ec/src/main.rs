@@ -31,12 +31,12 @@ use key_matrix::KeyMatrix;
 use layout::{Layer, Layout};
 use panic_probe as _;
 use rp_pico::{
-    hal::{self, prelude::*, timer::CountDown, usb::UsbBus, Timer},
+    hal::{self, prelude::*, usb::UsbBus},
     pac::{self, interrupt},
 };
 use rustkbd_core::{
     keyboard::{DeviceInfo, Keyboard, KeyboardState, UsbCommunicator},
-    split::{DummyConnection, SplitState},
+    split::SplitState,
 };
 use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
@@ -55,8 +55,6 @@ type KeyboardType = Keyboard<
     2,
     UsbBus,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 3, 4>,
-    DummyConnection,
-    CountDown<'static>,
     Layer,
     Layout,
 >;
@@ -65,7 +63,6 @@ static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::
 #[entry]
 fn main() -> ! {
     // These variables must be static due to lifetime constraints
-    static mut TIMER: Option<Timer> = None;
     static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
 
     defmt::info!("Launching necoboard-petit EC!");
@@ -95,7 +92,6 @@ fn main() -> ! {
     .ok()
     .unwrap();
     let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
-    *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
     let adc = Adc::new(pac.ADC, &mut pac.RESETS);
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
@@ -153,7 +149,6 @@ fn main() -> ! {
     let keyboard = Keyboard::new(
         UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap()),
         key_matrix,
-        TIMER.as_ref().unwrap().count_down(),
         Layout::default(),
     );
     cortex_m::interrupt::free(|cs| unsafe {
@@ -163,7 +158,6 @@ fn main() -> ! {
     unsafe {
         // Enable the USB interrupt
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
-        pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
     }
     // defmt のタイムスタンプを実装します
     // タイマを使えば、起動からの時間を表示したりできます
@@ -199,19 +193,6 @@ fn USBCTRL_IRQ() {
             .as_ref()
             .map(Keyboard::usb_poll)
     });
-}
-
-#[allow(non_snake_case)]
-#[interrupt]
-fn UART0_IRQ() {
-    cortex_m::interrupt::free(|cs| unsafe {
-        KEYBOARD
-            .borrow(cs)
-            .borrow()
-            .as_ref()
-            .map(Keyboard::split_poll)
-    });
-    cortex_m::asm::sev();
 }
 
 fn draw_state(display: &mut impl DrawTarget<Color = BinaryColor>, state: KeyboardState<Layer, 6>) {

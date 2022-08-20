@@ -2,30 +2,32 @@ use embedded_hal::timer::CountDown;
 use embedded_time::duration::Microseconds;
 use heapless::Vec;
 
-use crate::keyboard::{KeySwitches, NUM_SWITCH_ROLLOVER};
+use crate::keyboard::KeySwitches;
 
 use super::{Connection, ConnectionExt, Error, Message, SplitState};
 
 pub struct SplitCommunicator<
     const SZ: usize,
-    K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
+    const RO: usize,
+    K: KeySwitches<SZ, RO>,
     S: Connection,
     T: CountDown<Time = Microseconds<u64>>,
 > {
     connection: S,
     state: SplitState,
     timer: T,
-    buffer: Vec<K::Identifier, NUM_SWITCH_ROLLOVER>,
+    buffer: Vec<K::Identifier, RO>,
 }
 
 impl<
         const SZ: usize,
-        K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
+        const RO: usize,
+        K: KeySwitches<SZ, RO>,
         S: Connection,
         T: CountDown<Time = Microseconds<u64>>,
-    > SplitCommunicator<SZ, K, S, T>
+    > SplitCommunicator<SZ, RO, K, S, T>
 {
-    pub fn new(connection: S, timer: T) -> SplitCommunicator<SZ, K, S, T> {
+    pub fn new(connection: S, timer: T) -> SplitCommunicator<SZ, RO, K, S, T> {
         SplitCommunicator {
             connection,
             state: SplitState::Undetermined, // TODO: これだとNotAvailableになれない
@@ -37,7 +39,7 @@ impl<
     pub fn establish(&mut self) -> Result<(), Error<S::Error>> {
         self.state = SplitState::Undetermined;
         self.connection
-            .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::FindReceiver);
+            .send_message(Message::<SZ, RO, K::Identifier>::FindReceiver);
         self.state = match self.read()? {
             Message::Acknowledge => {
                 defmt::info!("Split connection established");
@@ -55,7 +57,7 @@ impl<
         self.state
     }
 
-    pub fn respond(&mut self, keys: &Vec<K::Identifier, NUM_SWITCH_ROLLOVER>) {
+    pub fn respond(&mut self, keys: &Vec<K::Identifier, RO>) {
         match self.read() {
             Ok(Message::Switches(switches)) => {
                 // Controllerからrequestが届いたとき：バッファに保存しつつkeysをReplyする
@@ -70,7 +72,7 @@ impl<
             Ok(Message::FindReceiver) => {
                 // Controllerからestablishが届いたとき：Acknowledgeを応答して自分をReceiverにする
                 self.connection
-                    .send_message(Message::<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>::Acknowledge);
+                    .send_message(Message::<SZ, RO, K::Identifier>::Acknowledge);
                 self.state = SplitState::Receiver;
             }
             Ok(_) => {
@@ -82,10 +84,7 @@ impl<
         }
     }
 
-    pub fn request(
-        &mut self,
-        keys: &Vec<K::Identifier, NUM_SWITCH_ROLLOVER>,
-    ) -> Vec<K::Identifier, NUM_SWITCH_ROLLOVER> {
+    pub fn request(&mut self, keys: &Vec<K::Identifier, RO>) -> Vec<K::Identifier, RO> {
         // Controllerの場合：自分のキーを送信、Receiverから応答を受信して返す
         // Receiverの場合：respondで受信していたバッファを返す
         // それ以外：空
@@ -114,7 +113,7 @@ impl<
         }
     }
 
-    fn read(&mut self) -> Result<Message<SZ, NUM_SWITCH_ROLLOVER, K::Identifier>, Error<S::Error>> {
+    fn read(&mut self) -> Result<Message<SZ, RO, K::Identifier>, Error<S::Error>> {
         self.connection
             .read_message(&mut self.timer, Microseconds::<u64>::new(10_000)) // timeout in 10ms
     }
