@@ -35,8 +35,9 @@ use rp_pico::{
     pac::{self, interrupt},
 };
 use rustkbd_core::{
-    keyboard::{DeviceInfo, Keyboard, KeyboardState, UsbCommunicator},
+    keyboard::{Keyboard, KeyboardState},
     split::SplitState,
+    usb::{DeviceInfo, UsbCommunicator},
 };
 use ssd1306::{
     mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,

@@ -26,7 +26,10 @@ use rp_pico::{
     hal::{self, prelude::*, usb::UsbBus, Timer},
     pac::{self, interrupt},
 };
-use rustkbd_core::keyboard::{DeviceInfo, Keyboard, UsbCommunicator};
+use rustkbd_core::{
+    keyboard::Keyboard,
+    usb::{DeviceInfo, UsbCommunicator},
+};
 use usb_device::class_prelude::UsbBusAllocator;
 
 mod drawing;

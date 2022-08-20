@@ -8,10 +8,9 @@ use usbd_hid::{
     hid_class::HIDClass,
 };
 
-use super::{
-    external_communicator::ExternalCommunicator, hid_report::HidKeyboardReport, DeviceInfo, Key,
-    NUM_ROLLOVER,
-};
+use crate::keyboard::{ExternalCommunicator, Key, NUM_ROLLOVER};
+
+use super::{hid_report::HidKeyboardReport, DeviceInfo};
 
 pub struct UsbCommunicator<'a, B: UsbBus> {
     usb_device: UsbDevice<'a, B>,

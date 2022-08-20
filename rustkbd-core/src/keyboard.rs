@@ -1,11 +1,8 @@
-mod device_info;
 mod external_communicator;
-mod hid_report;
 mod key;
 mod key_switches;
 mod keyboard_state;
 mod layer;
-mod usb_communicator;
 
 use core::cell::RefCell;
 
@@ -13,13 +10,11 @@ use heapless::FnvIndexMap;
 
 use crate::{layout::Layout, split::SplitState, Vec};
 
-pub use device_info::DeviceInfo;
 pub use external_communicator::ExternalCommunicator;
 pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 pub use keyboard_state::KeyboardState;
 pub use layer::KeyboardLayer;
-pub use usb_communicator::UsbCommunicator;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
 pub(crate) const NUM_ROLLOVER: usize = 6;

@@ -38,8 +38,9 @@ use rp_pico::{
     pac::{self, interrupt, UART0},
 };
 use rustkbd_core::{
-    keyboard::{DeviceInfo, Keyboard, KeyboardState, UsbCommunicator},
+    keyboard::{Keyboard, KeyboardState},
     split::{SplitKeySwitches, SplitState},
+    usb::{DeviceInfo, UsbCommunicator},
 };
 use split_layout::{Layer, SplitLayout};
 use ssd1306::{
