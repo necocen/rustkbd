@@ -36,7 +36,6 @@ use rp_pico::{
 };
 use rustkbd_core::{
     keyboard::{Keyboard, KeyboardState},
-    split::SplitState,
     usb::{DeviceInfo, UsbCommunicator},
 };
 use ssd1306::{
@@ -210,17 +209,6 @@ fn draw_state(display: &mut impl DrawTarget<Color = BinaryColor>, state: Keyboar
             string.push(c).ok();
         });
     Text::new(string.as_str(), Point::new(0, 10), char_style)
-        .draw(display)
-        .ok();
-
-    // display "Receiver" or "Controller"
-    let split = match state.split {
-        SplitState::Undetermined => "Undetermined",
-        SplitState::NotAvailable => "N/A",
-        SplitState::Controller => "Controller",
-        SplitState::Receiver => "Receiver",
-    };
-    Text::new(split, Point::new(0, 22), char_style)
         .draw(display)
         .ok();
 

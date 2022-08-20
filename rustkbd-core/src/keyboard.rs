@@ -8,7 +8,7 @@ use core::cell::RefCell;
 
 use heapless::FnvIndexMap;
 
-use crate::{layout::Layout, split::SplitState, Vec};
+use crate::{layout::Layout, Vec};
 
 pub use external_communicator::ExternalCommunicator;
 pub use key::Key;
@@ -58,11 +58,7 @@ impl<
     pub fn get_state(&self) -> KeyboardState<Y, NUM_ROLLOVER> {
         let layer = *self.layer.borrow();
         let keys = self.keys.borrow().clone();
-        KeyboardState {
-            layer,
-            keys,
-            split: SplitState::NotAvailable,
-        }
+        KeyboardState { layer, keys }
     }
 
     pub fn main_loop(&self) {

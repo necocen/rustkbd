@@ -45,6 +45,10 @@ impl<
             .respond(&self.switches.borrow());
     }
 
+    pub fn state(&self) -> SplitState {
+        self.communicator.borrow().state()
+    }
+
     fn establish(&self) {
         if let Err(e) = self.communicator.borrow_mut().establish() {
             defmt::warn!("Failed to establish split connection: {}", e);

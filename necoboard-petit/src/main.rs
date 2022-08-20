@@ -180,13 +180,21 @@ fn main() -> ! {
             if let Err(e) = keyboard.send_keys() {
                 defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
             }
-            draw_state(&mut display, keyboard.get_state());
+            draw_state(
+                &mut display,
+                keyboard.get_state(),
+                keyboard.key_switches.state(),
+            );
             display.flush().ok();
         });
     }
 }
 
-fn draw_state(display: &mut impl DrawTarget<Color = BinaryColor>, state: KeyboardState<Layer, 6>) {
+fn draw_state(
+    display: &mut impl DrawTarget<Color = BinaryColor>,
+    state: KeyboardState<Layer, 6>,
+    split_state: SplitState,
+) {
     let char_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
     display.clear(BinaryColor::Off).ok();
 
@@ -205,9 +213,8 @@ fn draw_state(display: &mut impl DrawTarget<Color = BinaryColor>, state: Keyboar
         .ok();
 
     // display "Receiver" or "Controller"
-    let split = match state.split {
+    let split = match split_state {
         SplitState::Undetermined => "Undetermined",
-        SplitState::NotAvailable => "N/A",
         SplitState::Controller => "Controller",
         SplitState::Receiver => "Receiver",
     };
