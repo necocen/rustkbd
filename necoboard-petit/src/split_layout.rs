@@ -1,5 +1,5 @@
 use rustkbd_core::{
-    keyboard::{Key, KeyboardLayer, Layout},
+    keyboard::{self, Key, Layout},
     split::SplitKeySwitchIdentifier,
 };
 
@@ -9,7 +9,7 @@ use crate::key_matrix::KeySwitchIdentifier;
 #[non_exhaustive]
 pub struct SplitLayout {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, KeyboardLayer)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, keyboard::Layer)]
 pub enum Layer {
     Default,
     Lower,

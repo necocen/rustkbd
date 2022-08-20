@@ -1,4 +1,4 @@
-use rustkbd_core::keyboard::{Key, KeyboardLayer};
+use rustkbd_core::keyboard::{self, Key};
 
 use crate::switch_identifier::KeySwitchIdentifier;
 
@@ -6,7 +6,7 @@ use crate::switch_identifier::KeySwitchIdentifier;
 #[non_exhaustive]
 pub struct Layout {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, KeyboardLayer)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, keyboard::Layer)]
 pub enum Layer {
     Default,
     Lower,

@@ -11,5 +11,5 @@ pub use external_communicator::ExternalCommunicator;
 pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 pub use keyboard_state::KeyboardState;
-pub use layer::KeyboardLayer;
+pub use layer::Layer;
 pub use layout::Layout;

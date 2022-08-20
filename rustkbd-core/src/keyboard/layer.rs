@@ -1,5 +1,5 @@
-pub use rustkbd_derive::KeyboardLayer;
+pub use rustkbd_derive::Layer;
 
-pub trait KeyboardLayer: Copy + Eq + Default {
+pub trait Layer: Copy + Eq + Default {
     fn below(&self) -> Option<Self>;
 }

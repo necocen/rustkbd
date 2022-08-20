@@ -1,7 +1,7 @@
 use quote::{quote, TokenStreamExt};
 use syn::{parse_macro_input, Data, DeriveInput};
 
-#[proc_macro_derive(KeyboardLayer)]
+#[proc_macro_derive(Layer)]
 pub fn derive_layer(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = ast.ident;
@@ -20,7 +20,7 @@ pub fn derive_layer(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     });
 
     let expanded = quote! {
-        impl rustkbd_core::keyboard::KeyboardLayer for #name {
+        impl rustkbd_core::keyboard::Layer for #name {
             fn below(&self) -> Option<Self> {
                 let layers = [#variants];
                 layers

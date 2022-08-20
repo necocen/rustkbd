@@ -3,8 +3,7 @@ use core::cell::RefCell;
 use heapless::{FnvIndexMap, Vec};
 
 use super::{
-    ExternalCommunicator, Key, KeySwitchIdentifier, KeySwitches, KeyboardLayer, KeyboardState,
-    Layout,
+    ExternalCommunicator, Key, KeySwitchIdentifier, KeySwitches, KeyboardState, Layer, Layout,
 };
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
@@ -16,7 +15,7 @@ pub struct Controller<
     const SZ: usize,
     C: ExternalCommunicator,
     K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-    Y: KeyboardLayer,
+    Y: Layer,
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
     pub communicator: C,
@@ -31,7 +30,7 @@ impl<
         const SZ: usize,
         C: ExternalCommunicator,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-        Y: KeyboardLayer,
+        Y: Layer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
     > Controller<SZ, C, K, Y, L>
 {
@@ -87,13 +86,7 @@ impl<
     }
 }
 
-fn determine_layers<
-    'a,
-    Y: KeyboardLayer,
-    SI: KeySwitchIdentifier<SZ>,
-    const SZ: usize,
-    const N: usize,
->(
+fn determine_layers<'a, Y: Layer, SI: KeySwitchIdentifier<SZ>, const SZ: usize, const N: usize>(
     pressed_switches: &FnvIndexMap<SI, Y, N>,
     switches: &'a [SI],
     global_layer: Y,
@@ -112,7 +105,7 @@ fn determine_layers<
         .collect()
 }
 
-fn determine_keys<Y: KeyboardLayer, L: Layout<SZ, Y>, const SZ: usize>(
+fn determine_keys<Y: Layer, L: Layout<SZ, Y>, const SZ: usize>(
     layout: &L,
     switches_and_layers: &[(&L::Identifier, Y)],
 ) -> Vec<Key, NUM_ROLLOVER> {
