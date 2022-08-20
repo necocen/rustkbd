@@ -78,10 +78,12 @@ type KeyboardType = Controller<
     SplitLayout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
-static mut ALARM: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCell::new(None));
+static mut ALARM0: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCell::new(None));
+static mut ALARM1: Mutex<RefCell<Option<hal::timer::Alarm1>>> = Mutex::new(RefCell::new(None));
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
 const USB_SEND_INTERVAL_MICROS: u32 = 10_000;
+const SWITCH_SCAN_INTERVAL_MICROS: u32 = 5_000;
 
 #[entry]
 fn main() -> ! {
@@ -118,13 +120,21 @@ fn main() -> ! {
     let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
 
-    let mut alarm = TIMER.as_mut().unwrap().alarm_0().unwrap();
-    alarm
+    let mut alarm0 = TIMER.as_mut().unwrap().alarm_0().unwrap();
+    alarm0
         .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
         .unwrap();
-    alarm.enable_interrupt();
+    alarm0.enable_interrupt();
     cortex_m::interrupt::free(|cs| unsafe {
-        ALARM.borrow(cs).replace(Some(alarm));
+        ALARM0.borrow(cs).replace(Some(alarm0));
+    });
+    let mut alarm1 = TIMER.as_mut().unwrap().alarm_1().unwrap();
+    alarm1
+        .schedule(SWITCH_SCAN_INTERVAL_MICROS.microseconds())
+        .unwrap();
+    alarm1.enable_interrupt();
+    cortex_m::interrupt::free(|cs| unsafe {
+        ALARM1.borrow(cs).replace(Some(alarm1));
     });
 
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
@@ -201,6 +211,7 @@ fn main() -> ! {
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
         pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
         pac::NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
+        pac::NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_1);
     }
 
     static COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -225,14 +236,7 @@ fn main() -> ! {
         .unwrap();
 
     loop {
-        cortex_m::interrupt::free(|cs| unsafe {
-            let _lock = Spinlock0::claim();
-            KEYBOARD
-                .borrow(cs)
-                .borrow()
-                .as_ref()
-                .map(Controller::main_loop);
-        });
+        cortex_m::asm::wfi();
     }
 }
 
@@ -311,7 +315,7 @@ fn UART0_IRQ() {
 fn TIMER_IRQ_0() {
     cortex_m::interrupt::free(|cs| unsafe {
         let _lock = Spinlock0::claim();
-        let mut alarm = ALARM.borrow(cs).borrow_mut();
+        let mut alarm = ALARM0.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
         alarm
@@ -326,5 +330,25 @@ fn TIMER_IRQ_0() {
         {
             defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
         }
+    });
+}
+
+#[allow(non_snake_case)]
+#[interrupt]
+fn TIMER_IRQ_1() {
+    cortex_m::interrupt::free(|cs| unsafe {
+        let _lock = Spinlock0::claim();
+        let mut alarm = ALARM1.borrow(cs).borrow_mut();
+        let alarm = alarm.as_mut().unwrap();
+        alarm.clear_interrupt();
+        alarm
+            .schedule(SWITCH_SCAN_INTERVAL_MICROS.microseconds())
+            .unwrap();
+        alarm.enable_interrupt();
+        KEYBOARD
+            .borrow(cs)
+            .borrow()
+            .as_ref()
+            .map(Controller::main_loop)
     });
 }
