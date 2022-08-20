@@ -23,3 +23,4 @@ display-interface = "0.4.1"
 nb = "1.0.0"
 snafu = { version = "0.7.1", default-features = false }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
+rp2040-hal-macros = "0.1.0"

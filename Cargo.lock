@@ -410,6 +410,7 @@ dependencies = [
  "panic-probe",
  "rp-pico",
  "rp2040-hal",
+ "rp2040-hal-macros",
  "rustkbd-core",
  "snafu",
  "ssd1306",

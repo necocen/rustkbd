@@ -1,13 +1,15 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use cortex_m::{
     delay::{self, Delay},
     interrupt::Mutex,
 };
-use cortex_m_rt::entry;
 use defmt_rtt as _;
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -18,11 +20,17 @@ use embedded_graphics::{
     Drawable,
 };
 use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
-use embedded_time::rate::*;
+use embedded_time::{duration::Extensions, rate::*};
+use hal::{
+    multicore::{Multicore, Stack},
+    sio::Spinlock0,
+    timer::Alarm,
+};
 use heapless::String;
 use key_matrix::KeyMatrix;
 use panic_probe as _;
 use rp_pico::{
+    entry,
     hal::{
         self,
         gpio::{
@@ -68,6 +76,10 @@ type KeyboardType = Controller<
     SplitLayout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
+static mut ALARM: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCell::new(None));
+static mut CORE1_STACK: Stack<4096> = Stack::new();
+
+const USB_SEND_INTERVAL_MICROS: u32 = 10_000;
 
 #[entry]
 fn main() -> ! {
@@ -80,7 +92,7 @@ fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     // The single-cycle I/O block controls our GPIO pins
-    let sio = hal::Sio::new(pac.SIO);
+    let mut sio = hal::Sio::new(pac.SIO);
     let pins = rp_pico::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
@@ -103,6 +115,19 @@ fn main() -> ! {
     .unwrap();
     let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
+
+    let mut alarm = TIMER.as_mut().unwrap().alarm_0().unwrap();
+    alarm
+        .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
+        .unwrap();
+    alarm.enable_interrupt();
+    cortex_m::interrupt::free(|cs| unsafe {
+        ALARM.borrow(cs).replace(Some(alarm));
+    });
+
+    let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
+    let cores = mc.cores();
+    let core1 = &mut cores[1];
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USBCTRL_REGS,
@@ -171,21 +196,38 @@ fn main() -> ! {
         // Enable the USB interrupt
         pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
         pac::NVIC::unmask(hal::pac::Interrupt::UART0_IRQ);
+        pac::NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
     }
+
+    static COUNT: AtomicUsize = AtomicUsize::new(0);
+    defmt::timestamp!("{=usize}", {
+        // NOTE(no-CAS) `timestamps` runs with interrupts disabled
+        let n = COUNT.load(Ordering::Relaxed);
+        COUNT.store(n + 1, Ordering::Relaxed);
+        n
+    });
+
+    core1
+        .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
+            let (state, split_state) = cortex_m::interrupt::free(|cs| unsafe {
+                let _lock = Spinlock0::claim();
+                let keyboard = KEYBOARD.borrow(cs).borrow();
+                let keyboard = keyboard.as_ref().unwrap();
+                (keyboard.get_state(), keyboard.key_switches.state())
+            });
+            draw_state(&mut display, state, split_state);
+            display.flush().ok();
+        })
+        .unwrap();
+
     loop {
         cortex_m::interrupt::free(|cs| unsafe {
-            let keyboard = KEYBOARD.borrow(cs).borrow();
-            let keyboard = keyboard.as_ref().unwrap();
-            keyboard.main_loop();
-            if let Err(e) = keyboard.send_keys() {
-                defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
-            }
-            draw_state(
-                &mut display,
-                keyboard.get_state(),
-                keyboard.key_switches.state(),
-            );
-            display.flush().ok();
+            let _lock = Spinlock0::claim();
+            KEYBOARD
+                .borrow(cs)
+                .borrow()
+                .as_ref()
+                .map(Controller::main_loop);
         });
     }
 }
@@ -237,6 +279,7 @@ fn draw_state(
 #[interrupt]
 fn USBCTRL_IRQ() {
     cortex_m::interrupt::free(|cs| unsafe {
+        let _lock = Spinlock0::claim();
         KEYBOARD
             .borrow(cs)
             .borrow_mut()
@@ -249,6 +292,7 @@ fn USBCTRL_IRQ() {
 #[interrupt]
 fn UART0_IRQ() {
     cortex_m::interrupt::free(|cs| unsafe {
+        let _lock = Spinlock0::claim();
         KEYBOARD
             .borrow(cs)
             .borrow()
@@ -256,4 +300,27 @@ fn UART0_IRQ() {
             .map(|keyboard| keyboard.key_switches.poll())
     });
     cortex_m::asm::sev();
+}
+
+#[allow(non_snake_case)]
+#[interrupt]
+fn TIMER_IRQ_0() {
+    cortex_m::interrupt::free(|cs| unsafe {
+        let _lock = Spinlock0::claim();
+        let mut alarm = ALARM.borrow(cs).borrow_mut();
+        let alarm = alarm.as_mut().unwrap();
+        alarm.clear_interrupt();
+        alarm
+            .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
+            .unwrap();
+        alarm.enable_interrupt();
+        if let Some(Err(e)) = KEYBOARD
+            .borrow(cs)
+            .borrow()
+            .as_ref()
+            .map(Controller::send_keys)
+        {
+            defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
+        }
+    });
 }
