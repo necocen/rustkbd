@@ -215,13 +215,13 @@ fn USBCTRL_IRQ() {
 #[interrupt]
 fn TIMER_IRQ_0() {
     cortex_m::interrupt::free(|cs| unsafe {
+        let _lock = Spinlock0::claim();
         let mut alarm = ALARM.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
         alarm
             .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
             .unwrap();
-        let _lock = Spinlock0::claim();
         alarm.enable_interrupt();
         if let Some(Err(e)) = KEYBOARD
             .borrow(cs)
