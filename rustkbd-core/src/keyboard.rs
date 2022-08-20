@@ -17,9 +17,9 @@ pub use keyboard_state::KeyboardState;
 pub use layer::KeyboardLayer;
 
 /// 最終的に送信されるキーのロールオーバー数。USBなので6。
-pub(crate) const NUM_ROLLOVER: usize = 6;
+const NUM_ROLLOVER: usize = 6;
 /// キースイッチレベルでのロールオーバー数。modifier keysを含めるので6より大きい。
-pub(crate) const NUM_SWITCH_ROLLOVER: usize = 12;
+const NUM_SWITCH_ROLLOVER: usize = 12;
 
 pub struct Keyboard<
     const SZ: usize,

@@ -8,7 +8,7 @@ use usbd_hid::{
     hid_class::HIDClass,
 };
 
-use crate::keyboard::{ExternalCommunicator, Key, NUM_ROLLOVER};
+use crate::keyboard::{ExternalCommunicator, Key};
 
 use super::{hid_report::HidKeyboardReport, DeviceInfo};
 
@@ -19,6 +19,8 @@ pub struct UsbCommunicator<'a, B: UsbBus> {
 }
 
 impl<'a, B: UsbBus> UsbCommunicator<'a, B> {
+    const NUM_ROLLOVER: usize = 6;
+
     pub fn new(
         device_info: DeviceInfo,
         usb_bus_alloc: &'a UsbBusAllocator<B>,
@@ -60,7 +62,7 @@ impl<'a, B: UsbBus> ExternalCommunicator for UsbCommunicator<'a, B> {
     }
 
     fn send_keys(&self, keys: &[Key]) -> Result<(), UsbError> {
-        let keyboard_report = keyboard_report(keys);
+        let keyboard_report = keyboard_report(keys, Self::NUM_ROLLOVER);
         let media_key = keys.iter().find(|key| key.is_media_key());
         let media_keyboard_report = media_report(media_key);
 
@@ -70,7 +72,7 @@ impl<'a, B: UsbBus> ExternalCommunicator for UsbCommunicator<'a, B> {
     }
 }
 
-fn keyboard_report(keys: &[Key]) -> HidKeyboardReport {
+fn keyboard_report(keys: &[Key], rollover: usize) -> HidKeyboardReport {
     let mut report = HidKeyboardReport::empty();
     report.modifier = keys
         .iter()
@@ -78,7 +80,7 @@ fn keyboard_report(keys: &[Key]) -> HidKeyboardReport {
         .fold(0x00_u8, |acc, flg| acc | flg);
     keys.iter()
         .filter_map(|key| key.key_code())
-        .take(NUM_ROLLOVER)
+        .take(rollover)
         .enumerate()
         .for_each(|(i, c)| report.key_codes[i] = c);
     report
