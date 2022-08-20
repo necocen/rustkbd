@@ -196,7 +196,7 @@ impl Layout {
     ];
 }
 
-impl rustkbd_core::layout::Layout<2, Layer> for Layout {
+impl rustkbd_core::keyboard::Layout<2, Layer> for Layout {
     type Identifier = KeySwitchIdentifier;
 
     fn layer(&self, switches: &[Self::Identifier]) -> Layer {

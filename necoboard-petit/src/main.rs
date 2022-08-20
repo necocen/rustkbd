@@ -38,7 +38,7 @@ use rp_pico::{
     pac::{self, interrupt, UART0},
 };
 use rustkbd_core::{
-    keyboard::{Keyboard, KeyboardState},
+    keyboard::{Controller, KeyboardState},
     split::{SplitKeySwitches, SplitState},
     usb::{DeviceInfo, UsbCommunicator},
 };
@@ -54,7 +54,7 @@ mod key_matrix;
 mod split_layout;
 mod uart_connection;
 
-type KeyboardType = Keyboard<
+type KeyboardType = Controller<
     3,
     UsbCommunicator<'static, UsbBus>,
     SplitKeySwitches<
@@ -162,7 +162,7 @@ fn main() -> ! {
         serial_number: "17",
     };
     let usb_communicator = UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap());
-    let keyboard = Keyboard::new(usb_communicator, key_switches, layout);
+    let keyboard = Controller::new(usb_communicator, key_switches, layout);
     cortex_m::interrupt::free(|cs| unsafe {
         KEYBOARD.borrow(cs).replace(Some(keyboard));
     });

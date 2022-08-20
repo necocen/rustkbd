@@ -35,7 +35,7 @@ use rp_pico::{
     pac::{self, interrupt},
 };
 use rustkbd_core::{
-    keyboard::{Keyboard, KeyboardState},
+    keyboard::{Controller, KeyboardState},
     usb::{DeviceInfo, UsbCommunicator},
 };
 use ssd1306::{
@@ -50,7 +50,7 @@ mod layout;
 mod switch_identifier;
 mod uart_connection;
 
-type KeyboardType = Keyboard<
+type KeyboardType = Controller<
     2,
     UsbCommunicator<'static, UsbBus>,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 3, 4>,
@@ -145,7 +145,7 @@ fn main() -> ! {
         serial_number: "17",
     };
 
-    let keyboard = Keyboard::new(
+    let keyboard = Controller::new(
         UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap()),
         key_matrix,
         Layout::default(),

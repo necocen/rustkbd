@@ -27,7 +27,7 @@ use rp_pico::{
     pac::{self, interrupt},
 };
 use rustkbd_core::{
-    keyboard::Keyboard,
+    keyboard::Controller,
     usb::{DeviceInfo, UsbCommunicator},
 };
 use usb_device::class_prelude::UsbBusAllocator;
@@ -38,7 +38,7 @@ mod key_matrix;
 mod layout;
 mod switch_identifier;
 
-type KeyboardType = Keyboard<
+type KeyboardType = Controller<
     2,
     UsbCommunicator<'static, UsbBus>,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 4, 12>,
@@ -145,7 +145,7 @@ fn main() -> ! {
         serial_number: "17",
     };
 
-    let keyboard = Keyboard::new(
+    let keyboard = Controller::new(
         UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap()),
         key_matrix,
         Layout::default(),
@@ -191,7 +191,7 @@ fn main() -> ! {
                 .borrow(cs)
                 .borrow()
                 .as_ref()
-                .map(Keyboard::main_loop);
+                .map(Controller::main_loop);
         });
         watchdog.feed();
     }
@@ -226,7 +226,7 @@ fn TIMER_IRQ_0() {
             .borrow(cs)
             .borrow()
             .as_ref()
-            .map(Keyboard::send_keys)
+            .map(Controller::send_keys)
         {
             defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));
         }

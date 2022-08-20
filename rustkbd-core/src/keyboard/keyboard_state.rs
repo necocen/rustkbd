@@ -1,4 +1,6 @@
-use super::{Key, KeyboardLayer, Vec};
+use heapless::Vec;
+
+use super::{Key, KeyboardLayer};
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]

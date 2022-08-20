@@ -1,6 +1,5 @@
 use rustkbd_core::{
-    keyboard::{Key, KeyboardLayer},
-    layout::Layout,
+    keyboard::{Key, KeyboardLayer, Layout},
     split::SplitKeySwitchIdentifier,
 };
 
