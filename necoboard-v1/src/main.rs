@@ -36,9 +36,8 @@ mod layout;
 mod switch_identifier;
 
 type KeyboardType = Keyboard<
-    'static,
     2,
-    UsbBus,
+    UsbCommunicator<'static, UsbBus>,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 4, 12>,
     Layer,
     Layout,
@@ -202,9 +201,9 @@ fn USBCTRL_IRQ() {
         let _lock = Spinlock0::claim();
         KEYBOARD
             .borrow(cs)
-            .borrow()
-            .as_ref()
-            .map(Keyboard::usb_poll);
+            .borrow_mut()
+            .as_mut()
+            .map(|keyboard| keyboard.communicator.poll())
     });
 }
 

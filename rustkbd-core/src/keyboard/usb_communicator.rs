@@ -8,7 +8,10 @@ use usbd_hid::{
     hid_class::HIDClass,
 };
 
-use super::{hid_report::HidKeyboardReport, DeviceInfo, Key, NUM_ROLLOVER};
+use super::{
+    external_communicator::ExternalCommunicator, hid_report::HidKeyboardReport, DeviceInfo, Key,
+    NUM_ROLLOVER,
+};
 
 pub struct UsbCommunicator<'a, B: UsbBus> {
     usb_device: UsbDevice<'a, B>,
@@ -40,16 +43,6 @@ impl<'a, B: UsbBus> UsbCommunicator<'a, B> {
         }
     }
 
-    pub fn send_keys(&self, keys: &[Key]) -> Result<(), UsbError> {
-        let keyboard_report = keyboard_report(keys);
-        let media_key = keys.iter().find(|key| key.is_media_key());
-        let media_keyboard_report = media_report(media_key);
-
-        self.keyboard_usb_hid.push_input(&keyboard_report)?;
-        self.media_usb_hid.push_input(&media_keyboard_report)?;
-        Ok(())
-    }
-
     pub fn poll(&mut self) {
         self.usb_device
             .poll(&mut [&mut self.keyboard_usb_hid, &mut self.media_usb_hid]);
@@ -57,6 +50,24 @@ impl<'a, B: UsbBus> UsbCommunicator<'a, B> {
 
     pub fn state(&self) -> UsbDeviceState {
         self.usb_device.state()
+    }
+}
+
+impl<'a, B: UsbBus> ExternalCommunicator for UsbCommunicator<'a, B> {
+    type Error = UsbError;
+
+    fn is_ready(&self) -> bool {
+        self.usb_device.state() == UsbDeviceState::Configured
+    }
+
+    fn send_keys(&self, keys: &[Key]) -> Result<(), UsbError> {
+        let keyboard_report = keyboard_report(keys);
+        let media_key = keys.iter().find(|key| key.is_media_key());
+        let media_keyboard_report = media_report(media_key);
+
+        self.keyboard_usb_hid.push_input(&keyboard_report)?;
+        self.media_usb_hid.push_input(&media_keyboard_report)?;
+        Ok(())
     }
 }
 

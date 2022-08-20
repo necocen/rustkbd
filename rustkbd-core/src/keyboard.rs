@@ -1,4 +1,5 @@
 mod device_info;
+mod external_communicator;
 mod hid_report;
 mod key;
 mod key_switches;
@@ -9,11 +10,11 @@ mod usb_communicator;
 use core::cell::RefCell;
 
 use heapless::FnvIndexMap;
-use usb_device::{class_prelude::UsbBus, prelude::UsbDeviceState, UsbError};
 
 use crate::{layout::Layout, split::SplitState, Vec};
 
 pub use device_info::DeviceInfo;
+pub use external_communicator::ExternalCommunicator;
 pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 pub use keyboard_state::KeyboardState;
@@ -26,14 +27,13 @@ pub(crate) const NUM_ROLLOVER: usize = 6;
 pub(crate) const NUM_SWITCH_ROLLOVER: usize = 12;
 
 pub struct Keyboard<
-    'b,
     const SZ: usize,
-    B: UsbBus,
+    C: ExternalCommunicator,
     K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
     Y: KeyboardLayer,
     L: Layout<SZ, Y, Identifier = K::Identifier>,
 > {
-    pub usb_communicator: RefCell<UsbCommunicator<'b, B>>,
+    pub communicator: C,
     pub key_switches: K,
     layer: RefCell<Y>,
     layout: L,
@@ -42,38 +42,16 @@ pub struct Keyboard<
 }
 
 impl<
-        'b,
         const SZ: usize,
-        B: UsbBus,
+        C: ExternalCommunicator,
         K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
         Y: KeyboardLayer,
         L: Layout<SZ, Y, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, B, K, Y, L>
+    > Keyboard<SZ, C, K, Y, L>
 {
-    pub fn new(usb_communicator: UsbCommunicator<'b, B>, key_switches: K, layout: L) -> Self {
+    pub fn new(communicator: C, key_switches: K, layout: L) -> Self {
         Keyboard {
-            usb_communicator: RefCell::new(usb_communicator),
-            key_switches,
-            layer: RefCell::new(Y::default()),
-            layout,
-            keys: RefCell::new(Vec::new()),
-            pressed_switches: RefCell::new(FnvIndexMap::new()),
-        }
-    }
-}
-
-impl<
-        'b,
-        const SZ: usize,
-        B: UsbBus,
-        K: KeySwitches<SZ, NUM_SWITCH_ROLLOVER>,
-        Y: KeyboardLayer,
-        L: Layout<SZ, Y, Identifier = K::Identifier>,
-    > Keyboard<'b, SZ, B, K, Y, L>
-{
-    pub fn new_split(usb_communicator: UsbCommunicator<'b, B>, key_switches: K, layout: L) -> Self {
-        Keyboard {
-            usb_communicator: RefCell::new(usb_communicator),
+            communicator,
             key_switches,
             layer: RefCell::new(Y::default()),
             layout,
@@ -118,18 +96,12 @@ impl<
         *self.keys.borrow_mut() = keys;
     }
 
-    pub fn usb_poll(&self) {
-        self.usb_communicator.borrow_mut().poll()
-    }
-
-    pub fn send_keys(&self) -> Result<(), UsbError> {
-        if self.usb_communicator.borrow().state() != UsbDeviceState::Configured {
+    pub fn send_keys(&self) -> Result<(), C::Error> {
+        if !self.communicator.is_ready() {
             return Ok(());
         }
 
-        self.usb_communicator
-            .borrow()
-            .send_keys(&self.keys.borrow())
+        self.communicator.send_keys(&self.keys.borrow())
     }
 }
 

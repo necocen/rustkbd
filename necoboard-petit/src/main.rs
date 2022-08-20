@@ -54,9 +54,8 @@ mod split_layout;
 mod uart_connection;
 
 type KeyboardType = Keyboard<
-    'static,
     3,
-    UsbBus,
+    UsbCommunicator<'static, UsbBus>,
     SplitKeySwitches<
         2,
         12,
@@ -162,7 +161,7 @@ fn main() -> ! {
         serial_number: "17",
     };
     let usb_communicator = UsbCommunicator::new(device_info, USB_BUS.as_ref().unwrap());
-    let keyboard = Keyboard::new_split(usb_communicator, key_switches, layout);
+    let keyboard = Keyboard::new(usb_communicator, key_switches, layout);
     cortex_m::interrupt::free(|cs| unsafe {
         KEYBOARD.borrow(cs).replace(Some(keyboard));
     });
@@ -232,9 +231,9 @@ fn USBCTRL_IRQ() {
     cortex_m::interrupt::free(|cs| unsafe {
         KEYBOARD
             .borrow(cs)
-            .borrow()
-            .as_ref()
-            .map(Keyboard::usb_poll)
+            .borrow_mut()
+            .as_mut()
+            .map(|keyboard| keyboard.communicator.poll())
     });
 }
 
