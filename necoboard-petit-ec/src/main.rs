@@ -34,7 +34,7 @@ use rp_pico::{
     hal::{self, prelude::*, usb::UsbBus},
     pac::{self, interrupt},
 };
-use rustkbd_core::{
+use rustkbd::{
     keyboard::{Controller, KeyboardState},
     usb::{DeviceInfo, UsbCommunicator},
 };

@@ -1,4 +1,4 @@
-use rustkbd_core::keyboard;
+use rustkbd::keyboard;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct KeySwitchIdentifier {

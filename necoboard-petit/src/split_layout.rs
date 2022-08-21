@@ -1,4 +1,4 @@
-use rustkbd_core::{
+use rustkbd::{
     keyboard::{self, Key, Layout},
     split::SplitKeySwitchIdentifier,
 };

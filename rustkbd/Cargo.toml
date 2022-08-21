@@ -1,5 +1,5 @@
 [package]
-name = "rustkbd-core"
+name = "rustkbd"
 version = "0.0.0"
 authors = ["necocen <necocen@gmail.com>"]
 edition = "2021"

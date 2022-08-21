@@ -26,7 +26,7 @@ use rp_pico::{
     hal::{self, prelude::*, usb::UsbBus, Timer},
     pac::{self, interrupt},
 };
-use rustkbd_core::{
+use rustkbd::{
     keyboard::Controller,
     usb::{DeviceInfo, UsbCommunicator},
 };

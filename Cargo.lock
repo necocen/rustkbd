@@ -411,7 +411,7 @@ dependencies = [
  "rp-pico",
  "rp2040-hal",
  "rp2040-hal-macros",
- "rustkbd-core",
+ "rustkbd",
  "snafu",
  "ssd1306",
  "usb-device",
@@ -433,7 +433,7 @@ dependencies = [
  "panic-probe",
  "rp-pico",
  "rp2040-hal",
- "rustkbd-core",
+ "rustkbd",
  "snafu",
  "ssd1306",
  "usb-device",
@@ -456,7 +456,7 @@ dependencies = [
  "rp-pico",
  "rp2040-hal",
  "rp2040-hal-macros",
- "rustkbd-core",
+ "rustkbd",
  "snafu",
  "ssd1306",
  "usb-device",
@@ -749,7 +749,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustkbd-core"
+name = "rustkbd"
 version = "0.0.0"
 dependencies = [
  "defmt",

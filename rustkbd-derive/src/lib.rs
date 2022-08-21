@@ -20,7 +20,7 @@ pub fn derive_layer(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     });
 
     let expanded = quote! {
-        impl rustkbd_core::keyboard::Layer for #name {
+        impl rustkbd::keyboard::Layer for #name {
             fn below(&self) -> Option<Self> {
                 let layers = [#variants];
                 layers

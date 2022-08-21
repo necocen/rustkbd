@@ -46,7 +46,7 @@ use rp_pico::{
     },
     pac::{self, interrupt, UART0},
 };
-use rustkbd_core::{
+use rustkbd::{
     keyboard::{Controller, KeyboardState},
     split::{SplitKeySwitches, SplitState},
     usb::{DeviceInfo, UsbCommunicator},

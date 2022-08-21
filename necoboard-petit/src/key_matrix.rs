@@ -5,7 +5,7 @@ use embedded_hal::{
     digital::v2::{InputPin, OutputPin},
 };
 use rp_pico::hal::gpio::DynPin;
-use rustkbd_core::{keyboard, Vec};
+use rustkbd::{keyboard, Vec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct KeySwitchIdentifier {

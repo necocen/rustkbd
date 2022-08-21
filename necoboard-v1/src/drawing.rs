@@ -17,7 +17,7 @@ use rp2040_hal::{
     Spi,
 };
 use rp_pico::pac::{self, SPI1};
-use rustkbd_core::keyboard::KeyboardState;
+use rustkbd::keyboard::KeyboardState;
 use ssd1306::{
     mode::BufferedGraphicsMode,
     prelude::{DisplayConfig, SPIInterface},

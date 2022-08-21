@@ -1,7 +1,7 @@
 use core::fmt::Display;
 
 use rp_pico::hal::uart::{Enabled, ReadErrorType, UartDevice, UartPeripheral, ValidUartPinout};
-use rustkbd_core::split::Connection;
+use rustkbd::split::Connection;
 
 pub struct UartConnection<D: UartDevice, P: ValidUartPinout<D>>(pub UartPeripheral<Enabled, D, P>);
 
