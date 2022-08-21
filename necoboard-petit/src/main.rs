@@ -19,13 +19,14 @@ use embedded_graphics::{
     text::Text,
     Drawable,
 };
-use embedded_hal::{digital::v2::InputPin, spi::MODE_0};
+use embedded_hal::digital::v2::InputPin;
 use embedded_time::{duration::Extensions, rate::*};
 use hal::{
     multicore::{Multicore, Stack},
     sio::Spinlock0,
     timer::Alarm,
     uart::Parity,
+    I2C,
 };
 use heapless::String;
 use key_matrix::KeyMatrix;
@@ -36,13 +37,13 @@ use rp_pico::{
         self,
         gpio::{
             bank0::{Gpio0, Gpio1},
-            Function, FunctionSpi, FunctionUart, Pin, Uart,
+            Function, FunctionUart, Pin, Uart,
         },
         prelude::*,
         timer::CountDown,
         uart::{common_configs, UartPeripheral},
         usb::UsbBus,
-        Spi, Timer,
+        Timer,
     },
     pac::{self, interrupt, UART0},
 };
@@ -53,7 +54,7 @@ use rustkbd::{
 };
 use split_layout::{Layer, SplitLayout};
 use ssd1306::{
-    mode::DisplayConfig, prelude::SPIInterface, rotation::DisplayRotation, size::DisplaySize128x64,
+    mode::DisplayConfig, rotation::DisplayRotation, size::DisplaySize128x32, I2CDisplayInterface,
     Ssd1306,
 };
 use uart_connection::UartConnection;
@@ -117,7 +118,7 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
 
     let mut alarm0 = TIMER.as_mut().unwrap().alarm_0().unwrap();
@@ -162,23 +163,16 @@ fn main() -> ! {
     uart.enable_rx_interrupt();
     let connection = UartConnection(uart);
 
-    // なぜかここで待たないとディスプレイが点灯しない
-    delay.delay_ms(100);
-
-    let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
+    let i2c = I2C::i2c0(
+        pac.I2C0,
+        pins.gpio4.into_mode(),
+        pins.gpio5.into_mode(),
+        400.kHz(),
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
-        16_000_000u32.Hz(),
-        &MODE_0,
     );
-    let _ = pins.gpio6.into_mode::<FunctionSpi>();
-    let _ = pins.gpio7.into_mode::<FunctionSpi>();
-    let interface = SPIInterface::new(
-        spi,
-        pins.gpio4.into_push_pull_output(),
-        pins.gpio5.into_push_pull_output(),
-    );
-    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate90)
+    let interface = I2CDisplayInterface::new(i2c);
+    let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
         .into_buffered_graphics_mode();
     display.init().ok();
 
@@ -268,7 +262,7 @@ fn draw_state<const RO: usize>(
         SplitState::Controller => "Controller",
         SplitState::Receiver => "Receiver",
     };
-    Text::new(split, Point::new(0, 22), char_style)
+    Text::new(split, Point::new(0, 20), char_style)
         .draw(display)
         .ok();
 
@@ -278,7 +272,7 @@ fn draw_state<const RO: usize>(
         Layer::Lower => "Lower",
         Layer::Raise => "Raise",
     };
-    Text::new(layer, Point::new(0, 34), char_style)
+    Text::new(layer, Point::new(0, 30), char_style)
         .draw(display)
         .ok();
 }
