@@ -839,9 +839,9 @@ dependencies = [
 
 [[package]]
 name = "ssd1306"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1fe1e39676a72e07a9592c8a30a008e58746b47e872c81ca909b1c2f992001b"
+checksum = "f066d5458b0a27d938dd2b71a8b397d88c5776cb316b8a39f19ef49b6d290709"
 dependencies = [
  "display-interface",
  "display-interface-i2c",
