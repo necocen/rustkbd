@@ -215,12 +215,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "doc-comment"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
-
-[[package]]
 name = "either"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -336,12 +330,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "heck"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
-
-[[package]]
 name = "itertools"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -412,7 +400,6 @@ dependencies = [
  "rp2040-hal",
  "rp2040-hal-macros",
  "rustkbd",
- "snafu",
  "ssd1306",
  "usb-device",
 ]
@@ -434,7 +421,6 @@ dependencies = [
  "rp-pico",
  "rp2040-hal",
  "rustkbd",
- "snafu",
  "ssd1306",
  "usb-device",
 ]
@@ -457,7 +443,6 @@ dependencies = [
  "rp2040-hal",
  "rp2040-hal-macros",
  "rustkbd",
- "snafu",
  "ssd1306",
  "usb-device",
 ]
@@ -758,7 +743,6 @@ dependencies = [
  "heapless 0.8.0",
  "nb 1.0.0",
  "rustkbd-derive",
- "snafu",
  "usb-device",
  "usbd-hid 0.6.0",
  "usbd-hid-macros",
@@ -805,28 +789,6 @@ name = "serde"
 version = "1.0.143"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53e8e5d5b70924f74ff5c6d64d9a5acd91422117c60f48c4e07855238a254553"
-
-[[package]]
-name = "snafu"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5177903bf45656592d9eb5c0e22f408fc023aae51dbe2088889b71633ba451f2"
-dependencies = [
- "doc-comment",
- "snafu-derive",
-]
-
-[[package]]
-name = "snafu-derive"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "410b26ed97440d90ced3e2488c868d56a86e2064f5d7d6f417909b286afe25e5"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "spin"

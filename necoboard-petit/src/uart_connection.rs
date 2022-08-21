@@ -47,5 +47,3 @@ impl defmt::Format for ReadError {
         }
     }
 }
-
-impl snafu::Error for ReadError {}

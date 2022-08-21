@@ -1,17 +1,16 @@
-use defmt::Format;
-use snafu::Snafu;
+use core::fmt::Debug;
 
-#[derive(Debug, Snafu, Format)]
-pub enum Error<E: 'static + snafu::Error> {
-    #[snafu(display("Read from connection timed out"))]
+use defmt::Format;
+
+#[derive(Debug, Format)]
+pub enum Error<E: 'static + Debug> {
     ReadTimedOut,
-    #[snafu(display("Read buffer overflowed"))]
     ReadBufferOverflow,
-    #[snafu(display("Read error: {source}"))]
     ReadError {
         #[defmt(Debug2Format)]
         source: E,
     },
-    #[snafu(display("Unknown message with type {head}"))]
-    UnknownMessage { head: u8 },
+    UnknownMessage {
+        head: u8,
+    },
 }

@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use embedded_hal::timer::CountDown;
 use nb;
 
@@ -8,7 +10,7 @@ use crate::{
 };
 
 pub trait Connection {
-    type Error: 'static + snafu::Error + defmt::Format;
+    type Error: 'static + defmt::Format + Debug;
     fn read_raw(&self, buffer: &mut [u8]) -> nb::Result<usize, Self::Error>;
 
     fn write(&self, data: &[u8]);
