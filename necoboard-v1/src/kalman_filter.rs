@@ -1,16 +1,16 @@
 use core::cell::RefCell;
 
 #[derive(Debug, Clone)]
-pub struct Filter {
+pub struct KalmanFilter {
     state: RefCell<Option<Gaussian>>,
 }
 
-impl Filter {
+impl KalmanFilter {
     const STATE_SIGMA: f32 = 2.0;
     const NOISE_SIGMA: f32 = 10.0;
 
-    pub fn new() -> Filter {
-        Filter {
+    pub fn new() -> KalmanFilter {
+        KalmanFilter {
             state: RefCell::new(None),
         }
     }

@@ -32,8 +32,9 @@ use rustkbd::{
 };
 use usb_device::class_prelude::UsbBusAllocator;
 
+mod buffer;
 mod drawing;
-mod filter;
+mod kalman_filter;
 mod key_matrix;
 mod layout;
 mod switch_identifier;

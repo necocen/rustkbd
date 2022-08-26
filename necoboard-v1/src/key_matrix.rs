@@ -9,7 +9,7 @@ use rp2040_hal::adc::Adc;
 use rp_pico::hal::gpio::DynPin;
 use rustkbd::{keyboard::KeySwitches, Vec};
 
-use crate::{filter::Filter, switch_identifier::KeySwitchIdentifier};
+use crate::{buffer::Buffer, kalman_filter::KalmanFilter, switch_identifier::KeySwitchIdentifier};
 
 pub struct KeyMatrix<
     D: DelayUs<u16>,
@@ -26,9 +26,8 @@ pub struct KeyMatrix<
     adc: RefCell<Adc>,
     adc_pin: RefCell<P>,
     delay: RefCell<D>,
-    filters: [[Filter; COLS]; ROWS],
-    /// for debug
-    counter: RefCell<u16>,
+    filters: [[KalmanFilter; COLS]; ROWS],
+    buffers: RefCell<[[Buffer<3>; COLS]; ROWS]>,
 }
 
 impl<
@@ -63,11 +62,19 @@ impl<
         rst_charge.into_push_pull_output();
         rst_charge.set_high().ok();
 
-        let mut filters: [[MaybeUninit<Filter>; COLS]; ROWS] =
+        let mut filters: [[MaybeUninit<KalmanFilter>; COLS]; ROWS] =
             unsafe { MaybeUninit::uninit().assume_init() };
         for slot in filters.iter_mut() {
             for slot in slot.iter_mut() {
-                *slot = MaybeUninit::new(Filter::new());
+                *slot = MaybeUninit::new(KalmanFilter::new());
+            }
+        }
+
+        let mut buffers: [[MaybeUninit<Buffer<3>>; COLS]; ROWS] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+        for slot in buffers.iter_mut() {
+            for slot in slot.iter_mut() {
+                *slot = MaybeUninit::new(Buffer::new());
             }
         }
 
@@ -80,8 +87,10 @@ impl<
             adc: RefCell::new(adc),
             adc_pin: RefCell::new(adc_pin),
             delay: RefCell::new(delay),
-            filters: unsafe { transmute_copy::<_, [[Filter; COLS]; ROWS]>(&filters) },
-            counter: RefCell::new(0),
+            filters: unsafe { transmute_copy::<_, [[KalmanFilter; COLS]; ROWS]>(&filters) },
+            buffers: RefCell::new(unsafe {
+                transmute_copy::<_, [[Buffer<3>; COLS]; ROWS]>(&buffers)
+            }),
         }
     }
 }
@@ -104,18 +113,13 @@ impl<
         let mut rst_charge = self.rst_charge.borrow_mut();
         let mut adc = self.adc.borrow_mut();
         let mut adc_pin = self.adc_pin.borrow_mut();
-        let mut counter = self.counter.borrow_mut();
+        let mut buffers = self.buffers.borrow_mut();
 
         // opa_shutdownとmux_enabledは実際はHi/Loが逆
         self.opa_shutdown.borrow_mut().set_high().ok();
         self.mux_enabled.borrow_mut().set_low().ok();
 
         delay.delay_us(10);
-
-        *counter += 1;
-        if *counter == 1000 {
-            *counter = 0;
-        }
 
         for col in 0..COLS {
             // マルチプレクサの設定
@@ -128,7 +132,7 @@ impl<
 
             for row in 0..ROWS {
                 rst_charge.set_low().ok();
-                delay.delay_us(100);
+                delay.delay_us(50);
                 rows[row].set_high().unwrap();
                 delay.delay_us(10);
 
@@ -138,7 +142,7 @@ impl<
                 //     defmt::debug!("{}", val);
                 // }
                 let val = self.filters[row][col].predict(val.into());
-                if val > 30.0 {
+                if buffers[row][col].update(val > 40.0) {
                     let key_identifier = KeySwitchIdentifier {
                         row: row as u8,
                         col: col as u8,
