@@ -13,6 +13,5 @@ usbd-hid = "0.6.0"
 usb-device = "0.2.9"
 usbd-hid-macros = "0.5.2"
 nb = "1.0.0"
-embedded-time = "0.12.1"
 defmt = "0.3.2"
 rustkbd-derive = { path = "../rustkbd-derive" }

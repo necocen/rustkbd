@@ -1,7 +1,6 @@
 use core::cell::RefCell;
 
 use embedded_hal::timer::CountDown;
-use embedded_time::duration::Microseconds;
 use heapless::Vec;
 
 use crate::{
@@ -14,25 +13,24 @@ pub struct SplitKeySwitches<
     const RO: usize,
     C: Connection,
     K: KeySwitches<SZ, RO>,
-    T: CountDown<Time = Microseconds<u64>>,
-> {
+    T: CountDown,
+> where
+    T::Time: Copy,
+{
     communicator: RefCell<SplitCommunicator<SZ, RO, K, C, T>>,
     switches: RefCell<Vec<K::Identifier, RO>>,
     underlying_switches: K,
     is_left: bool,
 }
 
-impl<
-        const SZ: usize,
-        const RO: usize,
-        C: Connection,
-        K: KeySwitches<SZ, RO>,
-        T: CountDown<Time = Microseconds<u64>>,
-    > SplitKeySwitches<SZ, RO, C, K, T>
+impl<const SZ: usize, const RO: usize, C: Connection, K: KeySwitches<SZ, RO>, T: CountDown>
+    SplitKeySwitches<SZ, RO, C, K, T>
+where
+    T::Time: Copy,
 {
-    pub fn new(key_switches: K, connection: C, timer: T, is_left: bool) -> Self {
+    pub fn new(key_switches: K, connection: C, timer: T, timeout: T::Time, is_left: bool) -> Self {
         SplitKeySwitches {
-            communicator: RefCell::new(SplitCommunicator::new(connection, timer)),
+            communicator: RefCell::new(SplitCommunicator::new(connection, timer, timeout)),
             switches: RefCell::new(Vec::new()),
             underlying_switches: key_switches,
             is_left,
@@ -126,12 +124,10 @@ macro_rules! impl_split_key_switches {
             for SplitKeySwitchIdentifier<$x, I>
         {
         }
-        impl<
-                const RO: usize,
-                C: Connection,
-                K: KeySwitches<$x, RO>,
-                T: CountDown<Time = Microseconds<u64>>,
-            > KeySwitches<{ $x + 1 }, RO> for SplitKeySwitches<$x, RO, C, K, T>
+        impl<const RO: usize, C: Connection, K: KeySwitches<$x, RO>, T: CountDown>
+            KeySwitches<{ $x + 1 }, RO> for SplitKeySwitches<$x, RO, C, K, T>
+        where
+            T::Time: Copy,
         {
             type Identifier = SplitKeySwitchIdentifier<$x, K::Identifier>;
             fn scan(&self) -> Vec<Self::Identifier, RO> {

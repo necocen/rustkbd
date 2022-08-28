@@ -21,7 +21,7 @@ use embedded_graphics::{
     Drawable,
 };
 use embedded_hal::spi::MODE_0;
-use embedded_time::rate::*;
+use fugit::RateExtU32;
 use hal::{
     gpio::{bank0::Gpio26, FloatingInput, FunctionSpi, Pin},
     Adc, Spi,
@@ -91,7 +91,7 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let mut delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
     let adc = Adc::new(pac.ADC, &mut pac.RESETS);
 
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
@@ -108,7 +108,7 @@ fn main() -> ! {
     let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
-        16_000_000u32.Hz(),
+        16u32.MHz(),
         &MODE_0,
     );
     let _ = pins.gpio6.into_mode::<FunctionSpi>();

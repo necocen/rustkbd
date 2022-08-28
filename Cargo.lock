@@ -23,7 +23,7 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c041a8d9751a520ee19656232a18971f18946a7900f1520ee4400002244dd89"
 dependencies = [
- "critical-section",
+ "critical-section 0.2.7",
 ]
 
 [[package]]
@@ -143,6 +143,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "critical-section"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d02ba51481d019be9c74a831d1133c364d78831b75c833478f3a21e1fd91e01a"
+
+[[package]]
 name = "debug-helper"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -183,7 +189,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d2cbbbd58847d508d97629b32cd9730a2d28532f71e219714614406029f18b1"
 dependencies = [
- "critical-section",
+ "critical-section 0.2.7",
  "defmt",
 ]
 
@@ -255,20 +261,11 @@ dependencies = [
 
 [[package]]
 name = "embedded-hal"
-version = "1.0.0-alpha.7"
+version = "1.0.0-alpha.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93cc714edeae73aa1ff259af4498595360b2992e0e9c59801873ed198a7f2216"
+checksum = "c3babfc7fd332142a0b11aebf592992f211f4e01b6222fb04b03aba1bd80018d"
 dependencies = [
  "nb 1.0.0",
-]
-
-[[package]]
-name = "embedded-time"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7a4b4d10ac48d08bfe3db7688c402baadb244721f30a77ce360bd24c3dffe58"
-dependencies = [
- "num",
 ]
 
 [[package]]
@@ -284,6 +281,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "fugit"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ab17bb279def6720d058cb6c052249938e7f99260ab534879281a95367a87e5"
+dependencies = [
+ "gcd",
+]
+
+[[package]]
+name = "gcd"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f37978dab2ca789938a83b2f8bc1ef32db6633af9051a6cd409eff72cbaaa79a"
+dependencies = [
+ "paste",
 ]
 
 [[package]]
@@ -392,7 +407,7 @@ dependencies = [
  "display-interface",
  "embedded-graphics",
  "embedded-hal 0.2.7",
- "embedded-time",
+ "fugit",
  "heapless 0.7.16",
  "nb 1.0.0",
  "panic-probe",
@@ -414,7 +429,7 @@ dependencies = [
  "defmt-rtt",
  "embedded-graphics",
  "embedded-hal 0.2.7",
- "embedded-time",
+ "fugit",
  "heapless 0.7.16",
  "nb 1.0.0",
  "panic-probe",
@@ -435,7 +450,7 @@ dependencies = [
  "defmt-rtt",
  "embedded-graphics",
  "embedded-hal 0.2.7",
- "embedded-time",
+ "fugit",
  "heapless 0.7.16",
  "nb 1.0.0",
  "panic-probe",
@@ -445,60 +460,6 @@ dependencies = [
  "rustkbd",
  "ssd1306",
  "usb-device",
-]
-
-[[package]]
-name = "num"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b7a8e9be5e039e2ff869df49155f1c06bd01ade2117ec783e56ab0932b67a8f"
-dependencies = [
- "num-complex",
- "num-integer",
- "num-iter",
- "num-rational",
- "num-traits",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "num-integer"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
-dependencies = [
- "autocfg",
- "num-traits",
-]
-
-[[package]]
-name = "num-iter"
-version = "0.1.43"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d03e6c028c5dc5cac6e2dec0efda81fc887605bb3d884578bb6d6bf7514e252"
-dependencies = [
- "autocfg",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12ac428b1cb17fce6f731001d307d351ec70a6d202fc2e60f7d4c5e42d8f4f07"
-dependencies = [
- "autocfg",
- "num-integer",
- "num-traits",
 ]
 
 [[package]]
@@ -645,18 +606,16 @@ dependencies = [
 
 [[package]]
 name = "rp-pico"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b83448890aab5f6e35aa64d6a2441d69b768e7a22aaf943a84b7459340028ec"
+checksum = "15eec35d047d5ac3f9bc12686687e404f587acce23f76b6af04c0e0ce270a0b5"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
- "embedded-time",
+ "fugit",
  "rp2040-boot2",
  "rp2040-hal",
  "usb-device",
- "usbd-hid 0.5.2",
- "usbd-serial",
 ]
 
 [[package]]
@@ -670,16 +629,17 @@ dependencies = [
 
 [[package]]
 name = "rp2040-hal"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0de1bc8bf092f5da649a417ad9f18c9705b6226afe3521a469f15d1d2bcb7f66"
+checksum = "2f919d0d3c64fd9c7642dac2267a55d6aa1667e45329e8605a3858727acc7711"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
- "critical-section",
+ "critical-section 0.2.7",
+ "critical-section 1.1.0",
  "embedded-hal 0.2.7",
- "embedded-hal 1.0.0-alpha.7",
- "embedded-time",
+ "embedded-hal 1.0.0-alpha.8",
+ "fugit",
  "itertools",
  "nb 1.0.0",
  "paste",
@@ -739,12 +699,11 @@ version = "0.0.0"
 dependencies = [
  "defmt",
  "embedded-hal 0.2.7",
- "embedded-time",
  "heapless 0.8.0",
  "nb 1.0.0",
  "rustkbd-derive",
  "usb-device",
- "usbd-hid 0.6.0",
+ "usbd-hid",
  "usbd-hid-macros",
 ]
 
@@ -853,18 +812,6 @@ checksum = "1f6cc3adc849b5292b4075fc0d5fdcf2f24866e88e336dd27a8943090a520508"
 
 [[package]]
 name = "usbd-hid"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "183b7e65bbd75512aedf250deda89394c74ae3118b79fe41f159e8503e1d5d7f"
-dependencies = [
- "serde",
- "ssmarshal",
- "usb-device",
- "usbd-hid-macros",
-]
-
-[[package]]
-name = "usbd-hid"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28ab3359cb8ad713361abb84030f120d7350488d75949ad4bb39f53a1a8321dd"
@@ -896,17 +843,6 @@ dependencies = [
  "serde",
  "syn",
  "usbd-hid-descriptors",
-]
-
-[[package]]
-name = "usbd-serial"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db75519b86287f12dcf0d171c7cf4ecc839149fe9f3b720ac4cfce52959e1dfe"
-dependencies = [
- "embedded-hal 0.2.7",
- "nb 0.1.3",
- "usb-device",
 ]
 
 [[package]]

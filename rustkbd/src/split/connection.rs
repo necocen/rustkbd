@@ -37,7 +37,7 @@ pub trait ConnectionExt: Connection {
     fn read_message<C: CountDown, const SZ: usize, const RO: usize, SI: KeySwitchIdentifier<SZ>>(
         &self,
         timer: &mut C,
-        timeout: impl Into<C::Time>,
+        timeout: C::Time,
     ) -> Result<Message<SZ, RO, SI>, Error<Self::Error>> {
         assert!(
             MAX_BUF_LEN > SZ * RO,
@@ -117,7 +117,7 @@ pub trait ConnectionExt: Connection {
         &self,
         buffer: &mut [u8],
         timer: &mut C,
-        timeout: impl Into<C::Time>,
+        timeout: C::Time,
     ) -> Result<(), Error<Self::Error>> {
         timer.start(timeout);
         let mut offset = 0;

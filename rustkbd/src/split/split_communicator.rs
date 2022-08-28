@@ -1,5 +1,4 @@
 use embedded_hal::timer::CountDown;
-use embedded_time::duration::Microseconds;
 use heapless::Vec;
 
 use crate::keyboard::KeySwitches;
@@ -11,28 +10,29 @@ pub struct SplitCommunicator<
     const RO: usize,
     K: KeySwitches<SZ, RO>,
     S: Connection,
-    T: CountDown<Time = Microseconds<u64>>,
-> {
+    C: CountDown,
+> where
+    C::Time: Copy,
+{
     connection: S,
     state: SplitState,
-    timer: T,
+    timer: C,
     buffer: Vec<K::Identifier, RO>,
+    timeout: C::Time,
 }
 
-impl<
-        const SZ: usize,
-        const RO: usize,
-        K: KeySwitches<SZ, RO>,
-        S: Connection,
-        T: CountDown<Time = Microseconds<u64>>,
-    > SplitCommunicator<SZ, RO, K, S, T>
+impl<const SZ: usize, const RO: usize, K: KeySwitches<SZ, RO>, S: Connection, C: CountDown>
+    SplitCommunicator<SZ, RO, K, S, C>
+where
+    C::Time: Copy,
 {
-    pub fn new(connection: S, timer: T) -> SplitCommunicator<SZ, RO, K, S, T> {
+    pub fn new(connection: S, timer: C, timeout: C::Time) -> SplitCommunicator<SZ, RO, K, S, C> {
         SplitCommunicator {
             connection,
             state: SplitState::Undetermined, // TODO: これだとNotAvailableになれない
             timer,
             buffer: Vec::new(),
+            timeout,
         }
     }
 
@@ -114,7 +114,6 @@ impl<
     }
 
     fn read(&mut self) -> Result<Message<SZ, RO, K::Identifier>, Error<S::Error>> {
-        self.connection
-            .read_message(&mut self.timer, Microseconds::<u64>::new(10_000)) // timeout in 10ms
+        self.connection.read_message(&mut self.timer, self.timeout) // timeout in 10ms
     }
 }

@@ -20,7 +20,7 @@ use embedded_graphics::{
     Drawable,
 };
 use embedded_hal::digital::v2::InputPin;
-use embedded_time::{duration::Extensions, rate::*};
+use fugit::{ExtU64, MicrosDurationU32, RateExtU32};
 use hal::{
     multicore::{Multicore, Stack},
     sio::Spinlock0,
@@ -83,8 +83,8 @@ static mut ALARM0: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCe
 static mut ALARM1: Mutex<RefCell<Option<hal::timer::Alarm1>>> = Mutex::new(RefCell::new(None));
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
-const USB_SEND_INTERVAL_MICROS: u32 = 10_000;
-const SWITCH_SCAN_INTERVAL_MICROS: u32 = 1_000;
+const USB_SEND_INTERVAL: MicrosDurationU32 = MicrosDurationU32::micros(10_000);
+const SWITCH_SCAN_INTERVAL: MicrosDurationU32 = MicrosDurationU32::micros(1_000);
 
 #[entry]
 fn main() -> ! {
@@ -118,21 +118,17 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-    let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
     *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
 
     let mut alarm0 = TIMER.as_mut().unwrap().alarm_0().unwrap();
-    alarm0
-        .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
-        .unwrap();
+    alarm0.schedule(USB_SEND_INTERVAL).unwrap();
     alarm0.enable_interrupt();
     cortex_m::interrupt::free(|cs| unsafe {
         ALARM0.borrow(cs).replace(Some(alarm0));
     });
     let mut alarm1 = TIMER.as_mut().unwrap().alarm_1().unwrap();
-    alarm1
-        .schedule(SWITCH_SCAN_INTERVAL_MICROS.microseconds())
-        .unwrap();
+    alarm1.schedule(SWITCH_SCAN_INTERVAL).unwrap();
     alarm1.enable_interrupt();
     cortex_m::interrupt::free(|cs| unsafe {
         ALARM1.borrow(cs).replace(Some(alarm1));
@@ -167,7 +163,7 @@ fn main() -> ! {
         pac.I2C0,
         pins.gpio4.into_mode(),
         pins.gpio5.into_mode(),
-        400.kHz(),
+        400u32.kHz(),
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
     );
@@ -184,6 +180,7 @@ fn main() -> ! {
         ),
         connection,
         TIMER.as_ref().unwrap().count_down(),
+        10u64.millis(),
         pins.gpio22.into_pull_up_input().is_low().unwrap(),
     );
     let layout = SplitLayout::default();
@@ -312,9 +309,7 @@ fn TIMER_IRQ_0() {
         let mut alarm = ALARM0.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
-        alarm
-            .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
-            .unwrap();
+        alarm.schedule(USB_SEND_INTERVAL).unwrap();
         alarm.enable_interrupt();
         if let Some(Err(e)) = KEYBOARD
             .borrow(cs)
@@ -335,9 +330,7 @@ fn TIMER_IRQ_1() {
         let mut alarm = ALARM1.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
-        alarm
-            .schedule(SWITCH_SCAN_INTERVAL_MICROS.microseconds())
-            .unwrap();
+        alarm.schedule(SWITCH_SCAN_INTERVAL).unwrap();
         alarm.enable_interrupt();
         KEYBOARD
             .borrow(cs)

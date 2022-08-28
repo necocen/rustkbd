@@ -6,7 +6,7 @@ use embedded_graphics::{
     Drawable,
 };
 use embedded_hal::spi::MODE_0;
-use embedded_time::rate::{Extensions, Hertz};
+use fugit::{HertzU32, RateExtU32};
 use heapless::String;
 use rp2040_hal::{
     gpio::{
@@ -68,7 +68,7 @@ pub fn draw_state<const RO: usize>(
 pub fn display(
     spi1: SPI1,
     resets: &mut pac::RESETS,
-    freq: Hertz,
+    freq: HertzU32,
     dc: Pin<Gpio8, PushPullOutput>,
     cs: Pin<Gpio9, PushPullOutput>,
     _gpio10: Pin<Gpio10, FunctionSpi>,
@@ -78,7 +78,7 @@ pub fn display(
     DisplaySize128x64,
     BufferedGraphicsMode<DisplaySize128x64>,
 > {
-    let spi = Spi::<_, _, 8>::new(spi1).init(resets, freq, 16_000_000u32.Hz(), &MODE_0);
+    let spi = Spi::<_, _, 8>::new(spi1).init(resets, freq, 16u32.MHz(), &MODE_0);
     let interface = SPIInterface::new(spi, dc, cs);
     let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
         .into_buffered_graphics_mode();

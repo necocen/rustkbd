@@ -9,8 +9,7 @@ use core::{
 use cortex_m::{delay::Delay, interrupt::Mutex};
 use defmt_rtt as _;
 use embedded_hal::watchdog::{Watchdog, WatchdogEnable};
-use embedded_time::duration::Extensions;
-use embedded_time::rate::*;
+use fugit::{ExtU32, MillisDurationU32};
 use hal::{
     gpio::{bank0::Gpio26, FloatingInput, FunctionSpi, Pin},
     multicore::{Multicore, Stack},
@@ -51,7 +50,7 @@ static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::
 static mut ALARM: Mutex<RefCell<Option<hal::timer::Alarm0>>> = Mutex::new(RefCell::new(None));
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
-const USB_SEND_INTERVAL_MICROS: u32 = 10_000;
+const USB_SEND_INTERVAL: MillisDurationU32 = MillisDurationU32::millis(10);
 
 #[entry]
 fn main() -> ! {
@@ -87,9 +86,7 @@ fn main() -> ! {
 
     let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS);
     let mut alarm = timer.alarm_0().unwrap();
-    alarm
-        .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
-        .unwrap();
+    alarm.schedule(USB_SEND_INTERVAL).unwrap();
     alarm.enable_interrupt();
     cortex_m::interrupt::free(|cs| unsafe {
         ALARM.borrow(cs).replace(Some(alarm));
@@ -136,7 +133,7 @@ fn main() -> ! {
         pins.gpio28.into(),
         Adc::new(pac.ADC, &mut pac.RESETS),
         pins.gpio26.into_floating_input(),
-        Delay::new(core.SYST, clocks.system_clock.freq().integer()),
+        Delay::new(core.SYST, clocks.system_clock.freq().to_Hz()),
     );
 
     let device_info = DeviceInfo {
@@ -184,7 +181,7 @@ fn main() -> ! {
         .unwrap();
 
     watchdog.pause_on_debug(true);
-    watchdog.start(1_000_000.microseconds());
+    watchdog.start(1.secs());
 
     loop {
         cortex_m::interrupt::free(|cs| unsafe {
@@ -220,9 +217,7 @@ fn TIMER_IRQ_0() {
         let mut alarm = ALARM.borrow(cs).borrow_mut();
         let alarm = alarm.as_mut().unwrap();
         alarm.clear_interrupt();
-        alarm
-            .schedule(USB_SEND_INTERVAL_MICROS.microseconds())
-            .unwrap();
+        alarm.schedule(USB_SEND_INTERVAL).unwrap();
         alarm.enable_interrupt();
         if let Some(Err(e)) = KEYBOARD
             .borrow(cs)
