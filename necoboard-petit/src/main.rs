@@ -336,8 +336,8 @@ fn TIMER_IRQ_1() {
         alarm.enable_interrupt();
         KEYBOARD
             .borrow(cs)
-            .borrow()
-            .as_ref()
+            .borrow_mut()
+            .as_mut()
             .map(Controller::main_loop)
     });
 }

@@ -1,5 +1,3 @@
-use core::cell::RefCell;
-
 use heapless::{FnvIndexMap, Vec};
 
 use super::{
@@ -16,10 +14,10 @@ pub struct Controller<
 > {
     pub communicator: C,
     pub key_switches: K,
-    layer: RefCell<Y>,
+    layer: Y,
     layout: L,
-    keys: RefCell<Vec<Key, RO>>,
-    pressed_switches: RefCell<FnvIndexMap<K::Identifier, Y, 16>>,
+    keys: Vec<Key, RO>,
+    pressed_switches: FnvIndexMap<K::Identifier, Y, 16>,
 }
 
 impl<
@@ -35,20 +33,21 @@ impl<
         Controller {
             communicator,
             key_switches,
-            layer: RefCell::new(Y::default()),
+            layer: Y::default(),
             layout,
-            keys: RefCell::new(Vec::new()),
-            pressed_switches: RefCell::new(FnvIndexMap::new()),
+            keys: Vec::new(),
+            pressed_switches: FnvIndexMap::new(),
         }
     }
 
     pub fn get_state(&self) -> KeyboardState<Y, RO> {
-        let layer = *self.layer.borrow();
-        let keys = self.keys.borrow().clone();
-        KeyboardState { layer, keys }
+        KeyboardState {
+            layer: self.layer,
+            keys: self.keys.clone(),
+        }
     }
 
-    pub fn main_loop(&self) {
+    pub fn main_loop(&mut self) {
         let switches = self.key_switches.scan();
 
         // グローバルなレイヤの決定
@@ -56,7 +55,7 @@ impl<
 
         // 個別のスイッチのレイヤの決定
         let switches_and_layers: Vec<_, RO> =
-            determine_layers(&self.pressed_switches.borrow(), &switches, global_layer);
+            determine_layers(&self.pressed_switches, &switches, global_layer);
 
         // キーの決定
         let keys = determine_keys(&self.layout, &switches_and_layers);
@@ -66,12 +65,12 @@ impl<
         }
 
         // スイッチ押下状態の更新
-        *self.pressed_switches.borrow_mut() = switches_and_layers
+        self.pressed_switches = switches_and_layers
             .into_iter()
             .map(|(s, l)| (*s, l))
             .collect();
-        *self.layer.borrow_mut() = global_layer;
-        *self.keys.borrow_mut() = keys;
+        self.layer = global_layer;
+        self.keys = keys;
     }
 
     pub fn send_keys(&self) -> Result<(), C::Error> {
@@ -79,7 +78,7 @@ impl<
             return Ok(());
         }
 
-        self.communicator.send_keys(&self.keys.borrow())
+        self.communicator.send_keys(&self.keys)
     }
 }
 

@@ -171,8 +171,8 @@ fn main() -> ! {
 
     loop {
         cortex_m::interrupt::free(|cs| unsafe {
-            let keyboard = KEYBOARD.borrow(cs).borrow();
-            let keyboard = keyboard.as_ref().unwrap();
+            let mut keyboard = KEYBOARD.borrow(cs).borrow_mut();
+            let keyboard = keyboard.as_mut().unwrap();
             keyboard.main_loop();
             if let Err(e) = keyboard.send_keys() {
                 defmt::warn!("UsbError: {}", defmt::Debug2Format(&e));

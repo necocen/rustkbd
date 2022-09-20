@@ -188,8 +188,8 @@ fn main() -> ! {
             let _lock = Spinlock0::claim();
             KEYBOARD
                 .borrow(cs)
-                .borrow()
-                .as_ref()
+                .borrow_mut()
+                .as_mut()
                 .map(Controller::main_loop);
         });
         watchdog.feed();
