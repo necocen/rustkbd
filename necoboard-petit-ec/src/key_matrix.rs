@@ -1,7 +1,4 @@
-use core::{
-    cell::RefCell,
-    mem::{transmute_copy, MaybeUninit},
-};
+use core::mem::{transmute_copy, MaybeUninit};
 
 use cortex_m::prelude::_embedded_hal_adc_OneShot;
 use embedded_hal::{adc::Channel, blocking::delay::DelayUs, digital::v2::OutputPin};
@@ -18,17 +15,17 @@ pub struct KeyMatrix<
     const CSELS: usize,
     const COLS: usize,
 > {
-    rows: RefCell<[DynPin; ROWS]>,
-    mux_selectors: RefCell<[DynPin; CSELS]>,
-    mux_enabled: RefCell<DynPin>,
-    opa_shutdown: RefCell<DynPin>,
-    rst_charge: RefCell<DynPin>,
-    adc: RefCell<Adc>,
-    adc_pin: RefCell<P>,
-    delay: RefCell<D>,
+    rows: [DynPin; ROWS],
+    mux_selectors: [DynPin; CSELS],
+    mux_enabled: DynPin,
+    opa_shutdown: DynPin,
+    rst_charge: DynPin,
+    adc: Adc,
+    adc_pin: P,
+    delay: D,
     filters: [[Filter; COLS]; ROWS],
     /// for debug
-    counter: RefCell<u16>,
+    counter: u16,
 }
 
 impl<
@@ -72,16 +69,16 @@ impl<
         }
 
         KeyMatrix {
-            rows: RefCell::new(rows),
-            mux_selectors: RefCell::new(mux_selectors),
-            mux_enabled: RefCell::new(mux_enabled),
-            opa_shutdown: RefCell::new(opa_shutdown),
-            rst_charge: RefCell::new(rst_charge),
-            adc: RefCell::new(adc),
-            adc_pin: RefCell::new(adc_pin),
-            delay: RefCell::new(delay),
+            rows,
+            mux_selectors,
+            mux_enabled,
+            opa_shutdown,
+            rst_charge,
+            adc,
+            adc_pin,
+            delay,
             filters: unsafe { transmute_copy::<_, [[Filter; COLS]; ROWS]>(&filters) },
-            counter: RefCell::new(0),
+            counter: 0,
         }
     }
 }
@@ -96,44 +93,39 @@ impl<
 {
     type Identifier = KeySwitchIdentifier;
 
-    fn scan(&self) -> Vec<Self::Identifier, 12> {
+    fn scan(&mut self) -> Vec<Self::Identifier, 12> {
         let mut keys = Vec::<Self::Identifier, 12>::new();
-        let mut rows = self.rows.borrow_mut();
-        let mut delay = self.delay.borrow_mut();
-        let mut csels = self.mux_selectors.borrow_mut();
-        let mut rst_charge = self.rst_charge.borrow_mut();
-        let mut adc = self.adc.borrow_mut();
-        let mut adc_pin = self.adc_pin.borrow_mut();
-        let mut counter = self.counter.borrow_mut();
 
         // opa_shutdownとmux_enabledは実際はHi/Loが逆
-        self.opa_shutdown.borrow_mut().set_high().ok();
-        self.mux_enabled.borrow_mut().set_low().ok();
+        self.opa_shutdown.set_high().ok();
+        self.mux_enabled.set_low().ok();
 
-        delay.delay_us(10);
+        self.delay.delay_us(10);
 
-        *counter += 1;
-        if *counter == 1000 {
-            *counter = 0;
+        self.counter += 1;
+        if self.counter == 1000 {
+            self.counter = 0;
         }
 
         for col in 0..COLS {
             // マルチプレクサの設定
-            self.mux_enabled.borrow_mut().set_high().ok();
+            self.mux_enabled.set_high().ok();
             for sel in 0..CSELS {
-                csels[sel].set_state((col & (1 << sel) != 0).into()).ok();
+                self.mux_selectors[sel]
+                    .set_state((col & (1 << sel) != 0).into())
+                    .ok();
             }
-            self.mux_enabled.borrow_mut().set_low().ok();
-            delay.delay_us(10);
+            self.mux_enabled.set_low().ok();
+            self.delay.delay_us(10);
 
             for row in 0..ROWS {
-                rst_charge.set_low().ok();
-                delay.delay_us(100);
-                rows[row].set_high().unwrap();
-                delay.delay_us(10);
+                self.rst_charge.set_low().ok();
+                self.delay.delay_us(100);
+                self.rows[row].set_high().unwrap();
+                self.delay.delay_us(10);
 
-                let val: u16 = adc.read(&mut *adc_pin).unwrap_or(0);
-                delay.delay_us(10);
+                let val: u16 = self.adc.read(&mut self.adc_pin).unwrap_or(0);
+                self.delay.delay_us(10);
                 // if col == 0 && row == 0 {
                 //     defmt::debug!("{}", val);
                 // }
@@ -146,14 +138,14 @@ impl<
                     keys.push(key_identifier).ok();
                 }
 
-                rows[row].set_low().unwrap();
-                rst_charge.set_high().ok();
-                delay.delay_us(5);
+                self.rows[row].set_low().unwrap();
+                self.rst_charge.set_high().ok();
+                self.delay.delay_us(5);
             }
         }
 
-        self.mux_enabled.borrow_mut().set_high().ok();
-        self.opa_shutdown.borrow_mut().set_low().ok();
+        self.mux_enabled.set_high().ok();
+        self.opa_shutdown.set_low().ok();
 
         keys
     }

@@ -4,7 +4,7 @@ use crate::Vec;
 
 pub trait KeySwitches<const SZ: usize, const RO: usize> {
     type Identifier: KeySwitchIdentifier<SZ>;
-    fn scan(&self) -> Vec<Self::Identifier, RO>;
+    fn scan(&mut self) -> Vec<Self::Identifier, RO>;
 }
 
 pub trait KeySwitchIdentifier<const SZ: usize>:

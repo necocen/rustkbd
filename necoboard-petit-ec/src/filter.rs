@@ -1,8 +1,6 @@
-use core::cell::RefCell;
-
 #[derive(Debug, Clone)]
 pub struct Filter {
-    state: RefCell<Option<Gaussian>>,
+    state: Option<Gaussian>,
 }
 
 impl Filter {
@@ -10,16 +8,14 @@ impl Filter {
     const NOISE_SIGMA: f32 = 10.0;
 
     pub fn new() -> Filter {
-        Filter {
-            state: RefCell::new(None),
-        }
+        Filter { state: None }
     }
 
-    pub fn predict(&self, observation: f32) -> f32 {
+    pub fn predict(&mut self, observation: f32) -> f32 {
         // Kalman filter
         // TODO: チャタリング対策
 
-        if let Some(ref mut state) = *self.state.borrow_mut() {
+        if let Some(ref mut state) = self.state {
             let prior = Gaussian::new(state.mu, state.sigma + Self::NOISE_SIGMA);
             let gain = prior.sigma / (prior.sigma + Self::STATE_SIGMA);
             *state = Gaussian::new(
@@ -29,8 +25,7 @@ impl Filter {
             return state.mu;
         }
 
-        let mut state = self.state.borrow_mut();
-        *state = Some(Gaussian::new(observation, Self::STATE_SIGMA));
+        self.state = Some(Gaussian::new(observation, Self::STATE_SIGMA));
         observation
     }
 }

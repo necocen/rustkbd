@@ -296,8 +296,8 @@ fn UART0_IRQ() {
         let _lock = Spinlock0::claim();
         KEYBOARD
             .borrow(cs)
-            .borrow()
-            .as_ref()
+            .borrow_mut()
+            .as_mut()
             .map(|keyboard| keyboard.key_switches.poll())
     });
     cortex_m::asm::sev();

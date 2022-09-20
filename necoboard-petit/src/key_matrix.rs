@@ -1,5 +1,3 @@
-use core::cell::RefCell;
-
 use embedded_hal::{
     blocking::delay::DelayUs,
     digital::v2::{InputPin, OutputPin},
@@ -32,8 +30,8 @@ impl keyboard::KeySwitchIdentifier<2> for KeySwitchIdentifier {}
 
 pub struct KeyMatrix<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> {
     inputs: [DynPin; ROWS],
-    outputs: RefCell<[DynPin; COLS]>,
-    delay: RefCell<D>,
+    outputs: [DynPin; COLS],
+    delay: D,
 }
 
 impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> KeyMatrix<D, ROWS, COLS> {
@@ -47,8 +45,8 @@ impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> KeyMatrix<D, ROWS, C
         }
         KeyMatrix {
             inputs,
-            outputs: RefCell::new(outputs),
-            delay: RefCell::new(delay),
+            outputs,
+            delay,
         }
     }
 }
@@ -58,12 +56,11 @@ impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> keyboard::KeySwitche
 {
     type Identifier = KeySwitchIdentifier;
 
-    fn scan(&self) -> Vec<Self::Identifier, 12> {
+    fn scan(&mut self) -> Vec<Self::Identifier, 12> {
         let mut keys = Vec::<Self::Identifier, 12>::new();
-        let mut outputs = self.outputs.borrow_mut();
         for i in 0..COLS {
-            outputs[i].set_high().ok();
-            self.delay.borrow_mut().delay_us(20);
+            self.outputs[i].set_high().ok();
+            self.delay.delay_us(20);
             for j in 0..ROWS {
                 if self.inputs[j].is_high().unwrap() {
                     keys.push(KeySwitchIdentifier {
@@ -73,7 +70,7 @@ impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> keyboard::KeySwitche
                     .ok();
                 }
             }
-            outputs[i].set_low().ok();
+            self.outputs[i].set_low().ok();
         }
         keys
     }

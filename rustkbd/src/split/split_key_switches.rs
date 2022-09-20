@@ -1,5 +1,3 @@
-use core::cell::RefCell;
-
 use embedded_hal::timer::CountDown;
 use heapless::Vec;
 
@@ -17,8 +15,8 @@ pub struct SplitKeySwitches<
 > where
     T::Time: Copy,
 {
-    communicator: RefCell<SplitCommunicator<SZ, RO, K, C, T>>,
-    switches: RefCell<Vec<K::Identifier, RO>>,
+    communicator: SplitCommunicator<SZ, RO, K, C, T>,
+    switches: Vec<K::Identifier, RO>,
     underlying_switches: K,
     is_left: bool,
 }
@@ -30,36 +28,34 @@ where
 {
     pub fn new(key_switches: K, connection: C, timer: T, timeout: T::Time, is_left: bool) -> Self {
         SplitKeySwitches {
-            communicator: RefCell::new(SplitCommunicator::new(connection, timer, timeout)),
-            switches: RefCell::new(Vec::new()),
+            communicator: SplitCommunicator::new(connection, timer, timeout),
+            switches: Vec::new(),
             underlying_switches: key_switches,
             is_left,
         }
     }
 
-    pub fn poll(&self) {
-        self.communicator
-            .borrow_mut()
-            .respond(&self.switches.borrow());
+    pub fn poll(&mut self) {
+        self.communicator.respond(&self.switches);
     }
 
     pub fn state(&self) -> SplitState {
-        self.communicator.borrow().state()
+        self.communicator.state()
     }
 
-    fn establish(&self) {
-        if let Err(e) = self.communicator.borrow_mut().establish() {
+    fn establish(&mut self) {
+        if let Err(e) = self.communicator.establish() {
             defmt::warn!("Failed to establish split connection: {}", e);
         }
     }
 
-    fn _scan(&self) -> Vec<SplitKeySwitchIdentifier<SZ, K::Identifier>, RO> {
-        if self.is_left && self.communicator.borrow().state() == SplitState::Undetermined {
+    fn _scan(&mut self) -> Vec<SplitKeySwitchIdentifier<SZ, K::Identifier>, RO> {
+        if self.is_left && self.communicator.state() == SplitState::Undetermined {
             self.establish();
         }
-        *self.switches.borrow_mut() = self.underlying_switches.scan();
-        let near_side = self.switches.borrow();
-        let far_side = self.communicator.borrow_mut().request(&near_side);
+        self.switches = self.underlying_switches.scan();
+        let near_side = self.switches.clone();
+        let far_side = self.communicator.request(&near_side);
 
         let left_side_transform: fn(K::Identifier) -> SplitKeySwitchIdentifier<SZ, K::Identifier> =
             SplitKeySwitchIdentifier::<SZ, K::Identifier>::Left;
@@ -130,7 +126,7 @@ macro_rules! impl_split_key_switches {
             T::Time: Copy,
         {
             type Identifier = SplitKeySwitchIdentifier<$x, K::Identifier>;
-            fn scan(&self) -> Vec<Self::Identifier, RO> {
+            fn scan(&mut self) -> Vec<Self::Identifier, RO> {
                 self._scan()
             }
         }
