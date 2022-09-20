@@ -215,12 +215,14 @@ fn main() -> ! {
 
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
-            let (state, split_state) = cortex_m::interrupt::free(|cs| unsafe {
+            let (state, split_state) = {
                 let _lock = Spinlock0::claim();
-                let keyboard = KEYBOARD.borrow(cs).borrow();
-                let keyboard = keyboard.as_ref().unwrap();
-                (keyboard.get_state(), keyboard.key_switches.state())
-            });
+                cortex_m::interrupt::free(|cs| unsafe {
+                    let keyboard = KEYBOARD.borrow(cs).borrow();
+                    let keyboard = keyboard.as_ref().unwrap();
+                    (keyboard.get_state(), keyboard.key_switches.state())
+                })
+            };
             draw_state(&mut display, state, split_state);
             display.flush().ok();
         })
