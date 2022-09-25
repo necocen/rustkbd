@@ -701,14 +701,14 @@ dependencies = [
  "embedded-hal 0.2.7",
  "heapless 0.8.0",
  "nb 1.0.0",
- "rustkbd-derive",
+ "rustkbd-macros",
  "usb-device",
  "usbd-hid",
  "usbd-hid-macros",
 ]
 
 [[package]]
-name = "rustkbd-derive"
+name = "rustkbd-macros"
 version = "0.0.0"
 dependencies = [
  "proc-macro2",
