@@ -18,7 +18,7 @@ use hal::{
     Adc,
 };
 use key_matrix::KeyMatrix;
-use layout::{Layer, Layout};
+use layout::Layout;
 use panic_probe as _;
 use rp_pico::{
     entry,
@@ -43,7 +43,6 @@ type KeyboardType = Controller<
     12,
     UsbCommunicator<'static, UsbBus>,
     KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 4, 12>,
-    Layer,
     Layout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));

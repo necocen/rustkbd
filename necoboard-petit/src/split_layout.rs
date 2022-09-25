@@ -44,8 +44,9 @@ impl SplitLayout {
     ];
 }
 
-impl Layout<3, Layer> for SplitLayout {
+impl Layout<3> for SplitLayout {
     type Identifier = SplitKeySwitchIdentifier<2, KeySwitchIdentifier>;
+    type Layer = Layer;
 
     fn layer(&self, switches: &[Self::Identifier]) -> Layer {
         switches

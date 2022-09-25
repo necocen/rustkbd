@@ -75,7 +75,6 @@ type KeyboardType = Controller<
         KeyMatrix<Delay, 2, 2>,
         CountDown<'static>,
     >,
-    Layer,
     SplitLayout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));

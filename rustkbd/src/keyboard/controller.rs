@@ -9,15 +9,14 @@ pub struct Controller<
     const RO: usize,
     C: ExternalCommunicator,
     K: KeySwitches<SZ, RO>,
-    Y: Layer,
-    L: Layout<SZ, Y, Identifier = K::Identifier>,
+    L: Layout<SZ, Identifier = K::Identifier>,
 > {
     pub communicator: C,
     pub key_switches: K,
-    layer: Y,
+    layer: L::Layer,
     layout: L,
     keys: Vec<Key, RO>,
-    pressed_switches: FnvIndexMap<K::Identifier, Y, 16>,
+    pressed_switches: FnvIndexMap<K::Identifier, L::Layer, 16>,
 }
 
 impl<
@@ -25,22 +24,21 @@ impl<
         const RO: usize,
         C: ExternalCommunicator,
         K: KeySwitches<SZ, RO>,
-        Y: Layer,
-        L: Layout<SZ, Y, Identifier = K::Identifier>,
-    > Controller<SZ, RO, C, K, Y, L>
+        L: Layout<SZ, Identifier = K::Identifier>,
+    > Controller<SZ, RO, C, K, L>
 {
     pub fn new(communicator: C, key_switches: K, layout: L) -> Self {
         Controller {
             communicator,
             key_switches,
-            layer: Y::default(),
+            layer: L::Layer::default(),
             layout,
             keys: Vec::new(),
             pressed_switches: FnvIndexMap::new(),
         }
     }
 
-    pub fn get_state(&self) -> KeyboardState<Y, RO> {
+    pub fn get_state(&self) -> KeyboardState<L::Layer, RO> {
         KeyboardState {
             layer: self.layer,
             keys: self.keys.clone(),
@@ -108,9 +106,9 @@ fn determine_layers<
         .collect()
 }
 
-fn determine_keys<Y: Layer, L: Layout<SZ, Y>, const SZ: usize, const RO: usize>(
+fn determine_keys<L: Layout<SZ>, const SZ: usize, const RO: usize>(
     layout: &L,
-    switches_and_layers: &[(&L::Identifier, Y)],
+    switches_and_layers: &[(&L::Identifier, L::Layer)],
 ) -> Vec<Key, RO> {
     switches_and_layers
         .iter()

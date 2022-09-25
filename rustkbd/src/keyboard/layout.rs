@@ -1,9 +1,10 @@
 use crate::keyboard::{Key, KeySwitchIdentifier, Layer};
 
-pub trait Layout<const SZ: usize, L: Layer> {
+pub trait Layout<const SZ: usize> {
     type Identifier: KeySwitchIdentifier<SZ>;
+    type Layer: Layer;
 
-    fn layer(&self, switches: &[Self::Identifier]) -> L;
+    fn layer(&self, switches: &[Self::Identifier]) -> Self::Layer;
 
-    fn key(&self, layer: L, switch: &Self::Identifier) -> Key;
+    fn key(&self, layer: Self::Layer, switch: &Self::Identifier) -> Key;
 }
