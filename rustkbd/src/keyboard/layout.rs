@@ -1,4 +1,5 @@
 use crate::keyboard::{Key, KeySwitchIdentifier, Layer};
+pub use rustkbd_macros::layout;
 
 pub trait Layout<const SZ: usize> {
     type Identifier: KeySwitchIdentifier<SZ>;

@@ -12,4 +12,4 @@ pub use key::Key;
 pub use key_switches::{KeySwitchIdentifier, KeySwitches};
 pub use keyboard_state::KeyboardState;
 pub use layer::Layer;
-pub use layout::Layout;
+pub use layout::{layout, Layout};
