@@ -1,4 +1,4 @@
-use rustkbd::keyboard::{self, Key};
+use rustkbd::keyboard::{self, layout, Key};
 
 use crate::switch_identifier::KeySwitchIdentifier;
 
@@ -20,39 +20,24 @@ impl Default for Layer {
 }
 
 impl Layout {
-    const KEY_CODES_DEFAULT: [[Key; 4]; 4] = [
-        [
-            Key::Digit1_Exclamation,
-            Key::Digit2_At,
-            Key::Digit3_Number,
-            Key::Digit4_Dollar,
-        ],
-        [
-            Key::Digit5_Percent,
-            Key::Digit6_Circumflex,
-            Key::Digit7_Ampersand,
-            Key::Digit8_Asterisk,
-        ],
-        [
-            Key::Digit9_LeftParenthesis,
-            Key::Digit0_RightParenthesis,
-            Key::Delete,
-            Key::Enter,
-        ],
-        [Key::None, Key::None, Key::None, Key::None],
-    ];
-    const KEY_CODES_LOWER: [[Key; 4]; 4] = [
-        [Key::A, Key::B, Key::C, Key::D],
-        [Key::E, Key::F, Key::G, Key::H],
-        [Key::I, Key::J, Key::K, Key::L],
-        [Key::None, Key::None, Key::None, Key::None],
-    ];
-    const KEY_CODES_RAISE: [[Key; 4]; 4] = [
-        [Key::M, Key::N, Key::O, Key::P],
-        [Key::Q, Key::R, Key::S, Key::T],
-        [Key::U, Key::V, Key::W, Key::X],
-        [Key::None, Key::None, Key::None, Key::None],
-    ];
+    const KEY_CODES_DEFAULT: [[Key; 4]; 4] = layout! {r"
+        |  1  |  2  |  3  |  4  |
+        |  5  |  6  |  7  |  8  |
+        |  9  |  0  | Del |Enter|
+        |     |     |     |     |
+    "};
+    const KEY_CODES_LOWER: [[Key; 4]; 4] = layout! {r"
+        |  A  |  B  |  C  |  D  |
+        |  E  |  F  |  G  |  H  |
+        |  I  |  J  |  K  |  L  |
+        |     |     |     |     |
+    "};
+    const KEY_CODES_RAISE: [[Key; 4]; 4] = layout! {r"
+        |  M  |  N  |  O  |  P  |
+        |  Q  |  R  |  S  |  T  |
+        |  U  |  V  |  W  |  X  |
+        |     |     |     |     |
+    "};
 }
 
 impl rustkbd::keyboard::Layout<2> for Layout {

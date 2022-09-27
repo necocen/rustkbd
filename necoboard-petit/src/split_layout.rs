@@ -1,5 +1,5 @@
 use rustkbd::{
-    keyboard::{self, Key, Layout},
+    keyboard::{self, layout, Key, Layout},
     split::SplitKeySwitchIdentifier,
 };
 
@@ -23,25 +23,31 @@ impl Default for Layer {
 }
 
 impl SplitLayout {
-    const KEY_CODES_LEFT: [[Key; 2]; 2] = [
-        [Key::Digit1_Exclamation, Key::Digit2_At],
-        [Key::LeftShift, Key::Delete],
-    ];
-    const KEY_CODES_RIGHT: [[Key; 2]; 2] = [
-        [Key::Digit3_Number, Key::Digit4_Dollar],
-        [Key::None, Key::None],
-    ];
-    const KEY_CODES_LOWER_LEFT: [[Key; 2]; 2] =
-        [[Key::A, Key::B], [Key::Transparent, Key::Transparent]];
-    const KEY_CODES_LOWER_RIGHT: [[Key; 2]; 2] = [[Key::C, Key::D], [Key::None, Key::None]];
-    const KEY_CODES_RAISE_LEFT: [[Key; 2]; 2] = [
-        [Key::None, Key::MediaVolumeDecrement],
-        [Key::None, Key::None],
-    ];
-    const KEY_CODES_RAISE_RIGHT: [[Key; 2]; 2] = [
-        [Key::MediaPlayPause, Key::MediaVolumeIncrement],
-        [Key::None, Key::None],
-    ];
+    const KEY_CODES_LEFT: [[Key; 2]; 2] = layout! {r"
+        |  1  |  2  |
+        | LSft| Del |
+    "};
+    const KEY_CODES_RIGHT: [[Key; 2]; 2] = layout! {r"
+        |  3  |  4  |
+        |     |     |
+    "};
+
+    const KEY_CODES_LOWER_LEFT: [[Key; 2]; 2] = layout! {r"
+        |  A  |  B  |
+        | Trn | Trn |
+    "};
+    const KEY_CODES_LOWER_RIGHT: [[Key; 2]; 2] = layout! {r"
+        |  C  |  D  |
+        |     |     |
+    "};
+    const KEY_CODES_RAISE_LEFT: [[Key; 2]; 2] = layout! {r"
+        |     |MVlDn|
+        |     |     |
+    "};
+    const KEY_CODES_RAISE_RIGHT: [[Key; 2]; 2] = layout! {r"
+        |MPlPs|MVlUp|
+        |     |     |
+    "};
 }
 
 impl Layout<3> for SplitLayout {
