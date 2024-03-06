@@ -1,9 +1,11 @@
 use core::mem::{transmute_copy, MaybeUninit};
 
 use cortex_m::prelude::_embedded_hal_adc_OneShot;
-use embedded_hal::{adc::Channel, blocking::delay::DelayUs, digital::v2::OutputPin};
-use rp2040_hal::adc::Adc;
-use rp_pico::hal::gpio::DynPin;
+use embedded_hal_0_2::{adc::Channel, blocking::delay::DelayUs, digital::v2::OutputPin as _};
+use rp2040_hal::{
+    adc::Adc,
+    gpio::{DynPinId, FunctionSio, Pin, PullDown, SioOutput},
+};
 use rustkbd::{keyboard::KeySwitches, Vec};
 
 use crate::{buffer::Buffer, kalman_filter::KalmanFilter, switch_identifier::KeySwitchIdentifier};
@@ -15,11 +17,11 @@ pub struct KeyMatrix<
     const CSELS: usize,
     const COLS: usize,
 > {
-    rows: [DynPin; ROWS],
-    mux_selectors: [DynPin; CSELS],
-    mux_enabled: DynPin,
-    opa_shutdown: DynPin,
-    rst_charge: DynPin,
+    rows: [Pin<DynPinId, FunctionSio<SioOutput>, PullDown>; ROWS],
+    mux_selectors: [Pin<DynPinId, FunctionSio<SioOutput>, PullDown>; CSELS],
+    mux_enabled: Pin<DynPinId, FunctionSio<SioOutput>, PullDown>,
+    opa_shutdown: Pin<DynPinId, FunctionSio<SioOutput>, PullDown>,
+    rst_charge: Pin<DynPinId, FunctionSio<SioOutput>, PullDown>,
     adc: Adc,
     adc_pin: P,
     delay: D,
@@ -37,26 +39,17 @@ impl<
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        mut rows: [DynPin; ROWS],
-        mut mux_selectors: [DynPin; CSELS],
-        mut mux_enabled: DynPin,
-        mut opa_shutdown: DynPin,
-        mut rst_charge: DynPin,
+        rows: [Pin<DynPinId, FunctionSio<SioOutput>, PullDown>; ROWS],
+        mux_selectors: [Pin<DynPinId, FunctionSio<SioOutput>, PullDown>; CSELS],
+        mut mux_enabled: Pin<DynPinId, FunctionSio<SioOutput>, PullDown>,
+        mut opa_shutdown: Pin<DynPinId, FunctionSio<SioOutput>, PullDown>,
+        mut rst_charge: Pin<DynPinId, FunctionSio<SioOutput>, PullDown>,
         adc: Adc,
         adc_pin: P,
         delay: D,
     ) -> KeyMatrix<D, P, ROWS, CSELS, COLS> {
-        for pin in rows.iter_mut() {
-            pin.into_push_pull_output()
-        }
-        for pin in mux_selectors.iter_mut() {
-            pin.into_push_pull_output()
-        }
-        mux_enabled.into_push_pull_output();
         mux_enabled.set_high().ok();
-        opa_shutdown.into_push_pull_output();
         opa_shutdown.set_low().ok();
-        rst_charge.into_push_pull_output();
         rst_charge.set_high().ok();
 
         let mut filters: [[MaybeUninit<KalmanFilter>; COLS]; ROWS] =

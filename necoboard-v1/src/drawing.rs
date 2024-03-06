@@ -11,7 +11,7 @@ use heapless::String;
 use rp2040_hal::{
     gpio::{
         bank0::{Gpio10, Gpio11, Gpio8, Gpio9},
-        FunctionSpi, Pin, PushPullOutput,
+        FunctionSioOutput, FunctionSpi, Pin, PullDown,
     },
     spi::Enabled,
     Spi,
@@ -69,17 +69,30 @@ pub fn display(
     spi1: SPI1,
     resets: &mut pac::RESETS,
     freq: HertzU32,
-    dc: Pin<Gpio8, PushPullOutput>,
-    cs: Pin<Gpio9, PushPullOutput>,
-    _gpio10: Pin<Gpio10, FunctionSpi>,
-    _gpio11: Pin<Gpio11, FunctionSpi>,
+    dc: Pin<Gpio8, FunctionSpi, PullDown>,
+    cs: Pin<Gpio9, FunctionSpi, PullDown>,
+    gpio10: Pin<Gpio10, FunctionSpi, PullDown>,
+    gpio11: Pin<Gpio11, FunctionSpi, PullDown>,
 ) -> Ssd1306<
-    SPIInterface<Spi<Enabled, SPI1, 8>, Pin<Gpio8, PushPullOutput>, Pin<Gpio9, PushPullOutput>>,
+    SPIInterface<
+        Spi<
+            Enabled,
+            SPI1,
+            (
+                Pin<Gpio11, FunctionSpi, PullDown>,
+                Pin<Gpio10, FunctionSpi, PullDown>,
+            ),
+            8,
+        >,
+        Pin<Gpio8, FunctionSioOutput, PullDown>,
+        Pin<Gpio9, FunctionSioOutput, PullDown>,
+    >,
     DisplaySize128x64,
     BufferedGraphicsMode<DisplaySize128x64>,
 > {
-    let spi = Spi::<_, _, 8>::new(spi1).init(resets, freq, 16u32.MHz(), &MODE_0);
-    let interface = SPIInterface::new(spi, dc, cs);
+    let spi =
+        Spi::<_, _, _, 8>::new(spi1, (gpio11, gpio10)).init(resets, freq, 16u32.MHz(), MODE_0);
+    let interface = SPIInterface::new(spi, dc.into_push_pull_output(), cs.into_push_pull_output());
     let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
         .into_buffered_graphics_mode();
     display.init().ok();

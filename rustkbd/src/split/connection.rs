@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use embedded_hal::timer::CountDown;
+use embedded_hal_0_2::timer::CountDown;
 use nb;
 
 use crate::{

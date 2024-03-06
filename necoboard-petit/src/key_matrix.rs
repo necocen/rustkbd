@@ -1,8 +1,8 @@
-use embedded_hal::{
+use embedded_hal_0_2::{
     blocking::delay::DelayUs,
-    digital::v2::{InputPin, OutputPin},
+    digital::v2::{InputPin as _, OutputPin as _},
 };
-use rp_pico::hal::gpio::DynPin;
+use rp2040_hal::gpio::{DynPinId, FunctionSioInput, FunctionSioOutput, Pin, PullDown};
 use rustkbd::{keyboard, Vec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -29,18 +29,18 @@ impl From<KeySwitchIdentifier> for [u8; 2] {
 impl keyboard::KeySwitchIdentifier<2> for KeySwitchIdentifier {}
 
 pub struct KeyMatrix<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> {
-    inputs: [DynPin; ROWS],
-    outputs: [DynPin; COLS],
+    inputs: [Pin<DynPinId, FunctionSioInput, PullDown>; ROWS],
+    outputs: [Pin<DynPinId, FunctionSioOutput, PullDown>; COLS],
     delay: D,
 }
 
 impl<D: DelayUs<u16>, const ROWS: usize, const COLS: usize> KeyMatrix<D, ROWS, COLS> {
-    pub fn new(mut inputs: [DynPin; ROWS], mut outputs: [DynPin; COLS], delay: D) -> Self {
-        for pin in inputs.iter_mut() {
-            pin.into_pull_down_input();
-        }
+    pub fn new(
+        inputs: [Pin<DynPinId, FunctionSioInput, PullDown>; ROWS],
+        mut outputs: [Pin<DynPinId, FunctionSioOutput, PullDown>; COLS],
+        delay: D,
+    ) -> Self {
         for pin in outputs.iter_mut() {
-            pin.into_push_pull_output();
             pin.set_low().ok();
         }
         KeyMatrix {

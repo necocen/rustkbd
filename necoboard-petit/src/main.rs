@@ -19,13 +19,14 @@ use embedded_graphics::{
     text::Text,
     Drawable,
 };
-use embedded_hal::digital::v2::InputPin;
-use fugit::{ExtU64, MicrosDurationU32, RateExtU32};
+use embedded_hal::digital::InputPin;
+use fugit::{ExtU64, HertzU32, MicrosDurationU32, RateExtU32};
 use hal::{
+    gpio::PullDown,
     multicore::{Multicore, Stack},
     sio::Spinlock0,
     timer::Alarm,
-    uart::Parity,
+    uart::{DataBits, Parity, StopBits, UartConfig},
     I2C,
 };
 use heapless::String;
@@ -37,11 +38,11 @@ use rp_pico::{
         self,
         gpio::{
             bank0::{Gpio0, Gpio1},
-            Function, FunctionUart, Pin, Uart,
+            FunctionUart, Pin,
         },
         prelude::*,
         timer::CountDown,
-        uart::{common_configs, UartPeripheral},
+        uart::UartPeripheral,
         usb::UsbBus,
         Timer,
     },
@@ -71,7 +72,13 @@ type KeyboardType = Controller<
     SplitKeySwitches<
         2,
         12,
-        UartConnection<UART0, (Pin<Gpio0, Function<Uart>>, Pin<Gpio1, Function<Uart>>)>,
+        UartConnection<
+            UART0,
+            (
+                Pin<Gpio0, FunctionUart, PullDown>,
+                Pin<Gpio1, FunctionUart, PullDown>,
+            ),
+        >,
         KeyMatrix<Delay, 2, 2>,
         CountDown<'static>,
     >,
@@ -118,7 +125,7 @@ fn main() -> ! {
     .ok()
     .unwrap();
     let delay = delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-    *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS));
+    *TIMER = Some(Timer::new(pac.TIMER, &mut pac.RESETS, &clocks));
 
     let mut alarm0 = TIMER.as_mut().unwrap().alarm_0().unwrap();
     alarm0.schedule(USB_SEND_INTERVAL).unwrap();
@@ -147,10 +154,15 @@ fn main() -> ! {
     *USB_BUS = Some(usb_bus);
 
     let uart_pins = (
-        pins.gpio0.into_mode::<FunctionUart>(),
-        pins.gpio1.into_mode::<FunctionUart>(),
+        pins.gpio0.into_function::<FunctionUart>(),
+        pins.gpio1.into_function::<FunctionUart>(),
     );
-    let mut uart_config = common_configs::_115200_8_N_1;
+    let mut uart_config = UartConfig::new(
+        HertzU32::from_raw(115_200),
+        DataBits::Eight,
+        None,
+        StopBits::One,
+    );
     uart_config.parity = Some(Parity::Even);
     let mut uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(uart_config, clocks.peripheral_clock.freq())
@@ -160,8 +172,8 @@ fn main() -> ! {
 
     let i2c = I2C::i2c0(
         pac.I2C0,
-        pins.gpio4.into_mode(),
-        pins.gpio5.into_mode(),
+        pins.gpio4.into_function(),
+        pins.gpio5.into_function(),
         400u32.kHz(),
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
@@ -173,8 +185,14 @@ fn main() -> ! {
 
     let key_switches = SplitKeySwitches::new(
         KeyMatrix::new(
-            [pins.gpio16.into(), pins.gpio17.into()],
-            [pins.gpio14.into(), pins.gpio15.into()],
+            [
+                pins.gpio16.into_pull_down_input().into_dyn_pin(),
+                pins.gpio17.into_pull_down_input().into_dyn_pin(),
+            ],
+            [
+                pins.gpio14.into_push_pull_output().into_dyn_pin(),
+                pins.gpio15.into_push_pull_output().into_dyn_pin(),
+            ],
             delay,
         ),
         connection,

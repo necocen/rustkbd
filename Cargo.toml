@@ -1,5 +1,6 @@
 [workspace]
 members = ["necoboard-petit", "necoboard-petit-ec", "necoboard-v1", "rustkbd", "rustkbd-macros"]
+resolver = "2"
 
 [profile.dev]
 panic = "abort"

@@ -23,7 +23,8 @@ use embedded_graphics::{
 use embedded_hal::spi::MODE_0;
 use fugit::RateExtU32;
 use hal::{
-    gpio::{bank0::Gpio26, FloatingInput, FunctionSpi, Pin},
+    adc::AdcPin,
+    gpio::{bank0::Gpio26, FunctionNull, Pin, PullDown},
     Adc, Spi,
 };
 use heapless::String;
@@ -54,7 +55,7 @@ type KeyboardType = Controller<
     2,
     12,
     UsbCommunicator<'static, UsbBus>,
-    KeyMatrix<Delay, Pin<Gpio26, FloatingInput>, 4, 3, 4>,
+    KeyMatrix<Delay, AdcPin<Pin<Gpio26, FunctionNull, PullDown>>, 4, 3, 4>,
     Layout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
@@ -104,14 +105,16 @@ fn main() -> ! {
 
     delay.delay_ms(100);
 
-    let spi = Spi::<_, _, 8>::new(pac.SPI0).init(
+    let spi = Spi::<_, _, _, 8>::new(
+        pac.SPI0,
+        (pins.gpio7.into_function(), pins.gpio6.into_function()),
+    )
+    .init(
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
         16u32.MHz(),
-        &MODE_0,
+        MODE_0,
     );
-    let _ = pins.gpio6.into_mode::<FunctionSpi>();
-    let _ = pins.gpio7.into_mode::<FunctionSpi>();
     let interface = SPIInterface::new(
         spi,
         pins.gpio4.into_push_pull_output(),
@@ -123,17 +126,21 @@ fn main() -> ! {
 
     let key_matrix = KeyMatrix::new(
         [
-            pins.gpio12.into(),
-            pins.gpio13.into(),
-            pins.gpio14.into(),
-            pins.gpio15.into(),
+            pins.gpio12.into_push_pull_output().into_dyn_pin(),
+            pins.gpio13.into_push_pull_output().into_dyn_pin(),
+            pins.gpio14.into_push_pull_output().into_dyn_pin(),
+            pins.gpio15.into_push_pull_output().into_dyn_pin(),
         ],
-        [pins.gpio20.into(), pins.gpio19.into(), pins.gpio18.into()],
-        pins.gpio21.into(),
-        pins.gpio27.into(),
-        pins.gpio28.into(),
+        [
+            pins.gpio20.into_push_pull_output().into_dyn_pin(),
+            pins.gpio19.into_push_pull_output().into_dyn_pin(),
+            pins.gpio18.into_push_pull_output().into_dyn_pin(),
+        ],
+        pins.gpio21.into_push_pull_output().into_dyn_pin(),
+        pins.gpio27.into_push_pull_output().into_dyn_pin(),
+        pins.gpio28.into_push_pull_output().into_dyn_pin(),
         adc,
-        pins.gpio26.into_floating_input(),
+        AdcPin::new(pins.gpio26),
         delay,
     );
 
