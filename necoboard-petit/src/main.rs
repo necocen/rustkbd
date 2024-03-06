@@ -22,7 +22,7 @@ use embedded_graphics::{
 use embedded_hal::digital::InputPin;
 use fugit::{ExtU64, HertzU32, MicrosDurationU32, RateExtU32};
 use hal::{
-    gpio::PullDown,
+    gpio::{PullDown, PullUp},
     multicore::{Multicore, Stack},
     sio::Spinlock0,
     timer::Alarm,
@@ -172,8 +172,8 @@ fn main() -> ! {
 
     let i2c = I2C::i2c0(
         pac.I2C0,
-        pins.gpio4.into_function(),
-        pins.gpio5.into_function(),
+        pins.gpio4.into_function().into_pull_type::<PullUp>(),
+        pins.gpio5.into_function().into_pull_type::<PullUp>(),
         400u32.kHz(),
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
