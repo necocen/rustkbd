@@ -56,7 +56,12 @@ impl<
             determine_layers(&self.pressed_switches, &switches, global_layer);
 
         // キーの決定
-        let keys = determine_keys(&self.layout, &switches_and_layers);
+        let mut keys = determine_keys(&self.layout, &switches_and_layers);
+
+        if keys.iter().any(|k| !k.is_modified_key()) {
+            // 修飾済みキー以外が押されているときは、修飾済みキーは無効化する
+            keys.retain(|k| !k.is_modified_key());
+        }
 
         if !keys.is_empty() {
             defmt::debug!("{}", keys.as_slice());
@@ -119,7 +124,7 @@ fn determine_keys<L: Layout<SZ>, const SZ: usize, const RO: usize>(
                     assert!(
                         layer != below,
                         "{}.below() does not change layer",
-                        stringify!(Y)
+                        stringify!(L::Layer)
                     );
                     layer = below;
                     key = layout.key(layer, switch);
