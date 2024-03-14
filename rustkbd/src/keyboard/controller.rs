@@ -56,12 +56,8 @@ impl<
             determine_layers(&self.pressed_switches, &switches, global_layer);
 
         // キーの決定
-        let mut keys = determine_keys(&self.layout, &switches_and_layers);
-
-        if keys.iter().any(|k| !k.is_modified_key()) {
-            // 修飾済みキー以外が押されているときは、修飾済みキーは無効化する
-            keys.retain(|k| !k.is_modified_key());
-        }
+        let keys = determine_keys(&self.layout, &switches_and_layers);
+        let keys = filter_keys(keys);
 
         if !keys.is_empty() {
             defmt::debug!("{}", keys.as_slice());
@@ -136,4 +132,12 @@ fn determine_keys<L: Layout<SZ>, const SZ: usize, const RO: usize>(
         })
         .filter(|key| !key.is_noop())
         .collect::<Vec<Key, RO>>()
+}
+
+fn filter_keys<const RO: usize>(mut keys: Vec<Key, RO>) -> Vec<Key, RO> {
+    if keys.iter().any(|k| !k.is_modified_key()) {
+        // 修飾済みキー以外が押されているときは、修飾済みキーは無効化する
+        keys.retain(|k| !k.is_modified_key());
+    }
+    keys
 }
