@@ -135,9 +135,67 @@ fn determine_keys<L: Layout<SZ>, const SZ: usize, const RO: usize>(
 }
 
 fn filter_keys<const RO: usize>(mut keys: Vec<Key, RO>) -> Vec<Key, RO> {
-    if keys.iter().any(|k| !k.is_modified_key()) {
+    if keys.iter().any(|k| !k.is_modified_key() && !k.is_modifier_key()) {
         // 修飾済みキー以外が押されているときは、修飾済みキーは無効化する
         keys.retain(|k| !k.is_modified_key());
+        // FIXME: シフトキーが押下されている状態でシフト修飾済みキーと非修飾キーが押下されたときは、シフト修飾済みキーを生かすべき
     }
     keys
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    // 修飾キーと関係のない場合
+    fn test_filter_keys_no_modified_keys() {
+        let mut keys = Vec::<Key, 6>::new();
+        keys.push(Key::A).unwrap();
+        keys.push(Key::B).unwrap();
+        let mut expected = Vec::<Key, 6>::new();
+        expected.push(Key::A).unwrap();
+        expected.push(Key::B).unwrap();
+        assert_eq!(expected, filter_keys(keys));
+    }
+
+    #[test]
+    // 修飾済みキーと非修飾キーが混在する場合、修飾済みキーは除外される
+    fn test_filter_keys_with_modified_key_and_unmodified_keys() {
+        let mut keys = Vec::<Key, 6>::new();
+        keys.push(Key::Asterisk).unwrap();
+        keys.push(Key::A).unwrap();
+        keys.push(Key::B).unwrap();
+        let mut expected = Vec::<Key, 6>::new();
+        expected.push(Key::A).unwrap();
+        expected.push(Key::B).unwrap();
+        assert_eq!(expected, filter_keys(keys));
+    }
+
+    #[test]
+    // 修飾済みキーと修飾キーの混在は許容される
+    fn test_filter_keys_with_modified_key_and_modifier_keys() {
+        let mut keys = Vec::<Key, 6>::new();
+        keys.push(Key::Asterisk).unwrap();
+        keys.push(Key::LeftGui).unwrap();
+        let mut expected = Vec::<Key, 6>::new();
+        expected.push(Key::Asterisk).unwrap();
+        expected.push(Key::LeftGui).unwrap();
+        assert_eq!(expected, filter_keys(keys));
+    }
+
+    #[test]
+    // 修飾済みキーと修飾キーと非修飾キーが混在する場合は、修飾キーと非修飾キーが残る
+    fn test_filter_keys_with_modified_key_and_modifier_keys_and_unmodified_keys() {
+        let mut keys = Vec::<Key, 6>::new();
+        keys.push(Key::Asterisk).unwrap();
+        keys.push(Key::LeftGui).unwrap();
+        keys.push(Key::A).unwrap();
+        keys.push(Key::B).unwrap();
+        let mut expected = Vec::<Key, 6>::new();
+        expected.push(Key::LeftGui).unwrap();
+        expected.push(Key::A).unwrap();
+        expected.push(Key::B).unwrap();
+        assert_eq!(expected, filter_keys(keys));
+    }
 }
