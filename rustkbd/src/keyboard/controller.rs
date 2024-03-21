@@ -135,7 +135,10 @@ fn determine_keys<L: Layout<SZ>, const SZ: usize, const RO: usize>(
 }
 
 fn filter_keys<const RO: usize>(mut keys: Vec<Key, RO>) -> Vec<Key, RO> {
-    if keys.iter().any(|k| !k.is_modified_key() && !k.is_modifier_key()) {
+    if keys
+        .iter()
+        .any(|k| !k.is_modified_key() && !k.is_modifier_key())
+    {
         // 修飾済みキー以外が押されているときは、修飾済みキーは無効化する
         keys.retain(|k| !k.is_modified_key());
         // FIXME: シフトキーが押下されている状態でシフト修飾済みキーと非修飾キーが押下されたときは、シフト修飾済みキーを生かすべき

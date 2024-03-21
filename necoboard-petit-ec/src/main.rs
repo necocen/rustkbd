@@ -22,17 +22,19 @@ use embedded_graphics::{
 };
 use embedded_hal::spi::MODE_0;
 use fugit::RateExtU32;
-use hal::{
-    adc::AdcPin,
-    gpio::{bank0::Gpio26, FunctionNull, Pin, PullDown},
-    Adc, Spi,
-};
 use heapless::String;
 use key_matrix::KeyMatrix;
 use layout::{Layer, Layout};
 use panic_probe as _;
 use rp_pico::{
-    hal::{self, prelude::*, usb::UsbBus},
+    hal::{
+        self,
+        adc::AdcPin,
+        gpio::{bank0::Gpio26, FunctionNull, Pin, PullDown},
+        prelude::*,
+        usb::UsbBus,
+        Adc, Spi,
+    },
     pac::{self, interrupt},
 };
 use rustkbd::{
@@ -126,21 +128,21 @@ fn main() -> ! {
 
     let key_matrix = KeyMatrix::new(
         [
-            pins.gpio12.into_push_pull_output().into_dyn_pin(),
-            pins.gpio13.into_push_pull_output().into_dyn_pin(),
-            pins.gpio14.into_push_pull_output().into_dyn_pin(),
-            pins.gpio15.into_push_pull_output().into_dyn_pin(),
+            pins.gpio12.reconfigure().into_dyn_pin(),
+            pins.gpio13.reconfigure().into_dyn_pin(),
+            pins.gpio14.reconfigure().into_dyn_pin(),
+            pins.gpio15.reconfigure().into_dyn_pin(),
         ],
         [
-            pins.gpio20.into_push_pull_output().into_dyn_pin(),
-            pins.gpio19.into_push_pull_output().into_dyn_pin(),
-            pins.gpio18.into_push_pull_output().into_dyn_pin(),
+            pins.gpio20.reconfigure().into_dyn_pin(),
+            pins.gpio19.reconfigure().into_dyn_pin(),
+            pins.gpio18.reconfigure().into_dyn_pin(),
         ],
-        pins.gpio21.into_push_pull_output().into_dyn_pin(),
-        pins.gpio27.into_push_pull_output().into_dyn_pin(),
-        pins.gpio28.into_push_pull_output().into_dyn_pin(),
+        pins.gpio21.reconfigure().into_dyn_pin(),
+        pins.gpio27.reconfigure().into_dyn_pin(),
+        pins.gpio28.reconfigure().into_dyn_pin(),
         adc,
-        AdcPin::new(pins.gpio26),
+        AdcPin::new(pins.gpio26).unwrap(),
         delay,
     );
 

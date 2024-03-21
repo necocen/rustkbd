@@ -2,7 +2,7 @@ use embedded_hal_0_2::{
     blocking::delay::DelayUs,
     digital::v2::{InputPin as _, OutputPin as _},
 };
-use rp2040_hal::gpio::{DynPinId, FunctionSioInput, FunctionSioOutput, Pin, PullDown};
+use rp_pico::hal::gpio::{DynPinId, FunctionSioInput, FunctionSioOutput, Pin, PullDown};
 use rustkbd::{keyboard, Vec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

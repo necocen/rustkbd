@@ -5,26 +5,23 @@ use core::{
     cell::RefCell,
     sync::atomic::{AtomicUsize, Ordering},
 };
-
 use cortex_m::{delay::Delay, interrupt::Mutex};
 use defmt_rtt as _;
-use embedded_hal_0_2::watchdog::{Watchdog, WatchdogEnable};
 use fugit::{ExtU32, MicrosDurationU32};
-use hal::{
-    adc::AdcPin,
-    gpio::{bank0::Gpio26, FunctionNull, Pin, PullDown},
-    multicore::{Multicore, Stack},
-    sio::Spinlock0,
-    timer::Alarm,
-    Adc,
-};
+use hal::{entry, Clock as _, Timer};
 use key_matrix::KeyMatrix;
 use layout::Layout;
 use panic_probe as _;
-use rp_pico::{
-    entry,
-    hal::{self, prelude::*, usb::UsbBus, Timer},
+use rp2040_hal::{
+    self as hal,
+    adc::AdcPin,
+    gpio,
+    multicore::{Multicore, Stack},
     pac::{self, interrupt},
+    sio::Spinlock0,
+    timer::Alarm,
+    usb::UsbBus,
+    Adc, Sio, Watchdog,
 };
 use rustkbd::{
     keyboard::Controller,
@@ -43,7 +40,13 @@ type KeyboardType = Controller<
     2,
     12,
     UsbCommunicator<'static, UsbBus>,
-    KeyMatrix<Delay, AdcPin<Pin<Gpio26, FunctionNull, PullDown>>, 4, 4, 12>,
+    KeyMatrix<
+        Delay,
+        AdcPin<gpio::Pin<gpio::bank0::Gpio26, gpio::FunctionNull, gpio::PullDown>>,
+        4,
+        4,
+        12,
+    >,
     Layout,
 >;
 static mut KEYBOARD: Mutex<RefCell<Option<KeyboardType>>> = Mutex::new(RefCell::new(None));
@@ -55,25 +58,25 @@ const USB_SEND_INTERVAL: MicrosDurationU32 = MicrosDurationU32::millis(10);
 #[entry]
 fn main() -> ! {
     // These variables must be static due to lifetime constraints
-    static mut USB_BUS: Option<UsbBusAllocator<hal::usb::UsbBus>> = None;
+    static mut USB_BUS: Option<UsbBusAllocator<UsbBus>> = None;
 
     defmt::info!("Launching necoboard v1!");
 
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
     // The single-cycle I/O block controls our GPIO pins
-    let mut sio = hal::Sio::new(pac.SIO);
-    let pins = rp_pico::Pins::new(
+    let mut sio = Sio::new(pac.SIO);
+    let pins = gpio::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
     // Set up the watchdog driver - needed by the clock setup code
-    let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
+    let mut watchdog = Watchdog::new(pac.WATCHDOG);
     // The default is to generate a 125 MHz system clock
     let clocks = hal::clocks::init_clocks_and_plls(
-        rp_pico::XOSC_CRYSTAL_FREQ,
+        12_000_000,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -117,22 +120,22 @@ fn main() -> ! {
 
     let key_matrix = KeyMatrix::new(
         [
-            pins.gpio15.into_push_pull_output().into_dyn_pin(),
-            pins.gpio14.into_push_pull_output().into_dyn_pin(),
-            pins.gpio13.into_push_pull_output().into_dyn_pin(),
-            pins.gpio12.into_push_pull_output().into_dyn_pin(),
+            pins.gpio15.reconfigure().into_dyn_pin(),
+            pins.gpio14.reconfigure().into_dyn_pin(),
+            pins.gpio13.reconfigure().into_dyn_pin(),
+            pins.gpio12.reconfigure().into_dyn_pin(),
         ],
         [
-            pins.gpio18.into_push_pull_output().into_dyn_pin(),
-            pins.gpio17.into_push_pull_output().into_dyn_pin(),
-            pins.gpio20.into_push_pull_output().into_dyn_pin(),
-            pins.gpio19.into_push_pull_output().into_dyn_pin(),
+            pins.gpio18.reconfigure().into_dyn_pin(),
+            pins.gpio17.reconfigure().into_dyn_pin(),
+            pins.gpio20.reconfigure().into_dyn_pin(),
+            pins.gpio19.reconfigure().into_dyn_pin(),
         ],
-        pins.gpio21.into_push_pull_output().into_dyn_pin(),
-        pins.voltage_monitor.into_push_pull_output().into_dyn_pin(),
-        pins.gpio28.into_push_pull_output().into_dyn_pin(),
+        pins.gpio21.reconfigure().into_dyn_pin(),
+        pins.gpio29.reconfigure().into_dyn_pin(),
+        pins.gpio28.reconfigure().into_dyn_pin(),
         Adc::new(pac.ADC, &mut pac.RESETS),
-        AdcPin::new(pins.gpio26),
+        AdcPin::new(pins.gpio26).unwrap(),
         Delay::new(core.SYST, clocks.system_clock.freq().to_Hz()),
     );
 

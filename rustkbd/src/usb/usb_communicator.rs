@@ -1,7 +1,7 @@
 use usb_device::{
     class_prelude::{UsbBus, UsbBusAllocator},
-    device::{UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
-    UsbError,
+    device::{StringDescriptors, UsbDevice, UsbDeviceBuilder, UsbDeviceState, UsbVidPid},
+    LangID, UsbError,
 };
 use usbd_hid::{
     descriptor::{MediaKeyboardReport, SerializedDescriptor},
@@ -27,13 +27,16 @@ impl<'a, B: UsbBus> UsbCommunicator<'a, B> {
     ) -> UsbCommunicator<'a, B> {
         let keyboard_usb_hid = HIDClass::new(usb_bus_alloc, HidKeyboardReport::desc(), 10);
         let media_usb_hid = HIDClass::new(usb_bus_alloc, MediaKeyboardReport::desc(), 10);
+        let descriptors = StringDescriptors::new(LangID::EN_US)
+            .manufacturer(device_info.manufacturer)
+            .serial_number(device_info.serial_number)
+            .product(device_info.product_name);
         let usb_device = UsbDeviceBuilder::new(
             usb_bus_alloc,
             UsbVidPid(device_info.vendor_id, device_info.product_id),
         )
-        .manufacturer(device_info.manufacturer)
-        .product(device_info.product_name)
-        .serial_number(device_info.serial_number)
+        .strings(&[descriptors])
+        .expect("Failed to create string descriptors")
         .device_class(0)
         .build();
 

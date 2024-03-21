@@ -13,10 +13,11 @@ use rp2040_hal::{
         bank0::{Gpio10, Gpio11, Gpio8, Gpio9},
         FunctionSioOutput, FunctionSpi, Pin, PullDown,
     },
+    pac,
+    pac::SPI1,
     spi::Enabled,
     Spi,
 };
-use rp_pico::pac::{self, SPI1};
 use rustkbd::keyboard::KeyboardState;
 use ssd1306::{
     mode::BufferedGraphicsMode,

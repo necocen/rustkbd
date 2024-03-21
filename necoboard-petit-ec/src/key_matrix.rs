@@ -2,9 +2,9 @@ use core::mem::{transmute_copy, MaybeUninit};
 
 use cortex_m::prelude::_embedded_hal_adc_OneShot;
 use embedded_hal_0_2::{adc::Channel, blocking::delay::DelayUs, digital::v2::OutputPin as _};
-use rp2040_hal::{
-    adc::Adc,
+use rp_pico::hal::{
     gpio::{DynPinId, FunctionSioOutput, Pin, PullDown},
+    Adc,
 };
 use rustkbd::{keyboard::KeySwitches, Vec};
 
