@@ -46,24 +46,18 @@ impl<
     }
 
     pub fn main_loop(&mut self) {
-        defmt::info!("0");
         let switches = self.key_switches.scan();
 
-        defmt::info!("1");
         // グローバルなレイヤの決定
         let global_layer = self.layout.layer(&switches);
 
-        defmt::info!("2");
         // 個別のスイッチのレイヤの決定
         let switches_and_layers: Vec<_, RO> =
             determine_layers(&self.pressed_switches, &switches, global_layer);
 
-            defmt::info!("3");
         // キーの決定
         let keys = determine_keys(&self.layout, &switches_and_layers);
-        defmt::info!("4");
         let keys = filter_keys(keys);
-        defmt::info!("5");
 
         if !keys.is_empty() {
             defmt::debug!("{}", keys.as_slice());
@@ -74,8 +68,6 @@ impl<
             .into_iter()
             .map(|(s, l)| (*s, l))
             .collect();
-
-            defmt::info!("6");
         self.layer = global_layer;
         self.keys = keys;
     }
