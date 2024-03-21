@@ -443,6 +443,7 @@ dependencies = [
  "heapless",
  "nb 1.1.0",
  "panic-probe",
+ "rp2040-boot2",
  "rp2040-hal",
  "rp2040-hal-macros",
  "rustkbd",
